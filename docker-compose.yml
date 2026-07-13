@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: carbonledger
+      POSTGRES_USER: carbonledger
+      POSTGRES_PASSWORD: changeme
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    depends_on:
+      - postgres
+    environment:
+      DATABASE_URL: postgresql://carbonledger:changeme@postgres:5432/carbonledger
+      PORT: 3001
+      JWT_SECRET: change-me-in-production
+      FRONTEND_URL: http://localhost:3000
+    ports:
+      - '3001:3001'
+
+volumes:
+  postgres_data:

@@ -1,0 +1,17 @@
+[package]
+name = "carbon_registry"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }
+
+[lib]
+crate-type = ["cdylib"]
+
+[profile.release]
+opt-level.workspace = true
+lto.workspace = true
+codegen-units.workspace = true
