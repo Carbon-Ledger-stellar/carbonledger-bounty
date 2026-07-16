@@ -105,3 +105,35 @@ model User {
   role      String   @default("corporation")
   createdAt DateTime @default(now())
 }
+
+model SupportTicket {
+  id              String   @id @default(cuid())
+  ticketId        String   @unique
+  bountyId        String
+  contributorId   String
+  maintainerId    String?
+  type            String   // unclear-requirement, blocker-bug, scope-creep, access-issue
+  status          String   @default("open") // open, in-progress, resolved
+  title           String
+  description     String
+  attachments     String[]
+  createdAt       DateTime @default(now())
+  acknowledgedAt  DateTime?
+  resolvedAt      DateTime?
+  resolution      String?
+
+  @@index([bountyId])
+  @@index([contributorId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model SupportMetrics {
+  id            String   @id @default(cuid())
+  ticketType    String   // ticket type
+  frequency     Int      @default(0) // number of times this issue type appears
+  avgResolution Int      @default(0) // average resolution time in hours
+  lastUpdated   DateTime @default(now()) @updatedAt
+
+  @@unique([ticketType])
+}
