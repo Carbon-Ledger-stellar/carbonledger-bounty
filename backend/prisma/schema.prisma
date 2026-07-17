@@ -137,3 +137,55 @@ model SupportMetrics {
 
   @@unique([ticketType])
 }
+
+model Campaign {
+  id              String   @id @default(cuid())
+  campaignId      String   @unique
+  name            String
+  description     String
+  startDate       DateTime
+  endDate         DateTime
+  goal            Int      @default(50) // target number of bounties
+  status          String   @default("pending") // pending, active, completed, archived
+  featuredBounties String[] @default([]) // array of bounty IDs (max 5)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  bounties    CampaignBounty[]
+  leaderboard LeaderboardEntry[]
+
+  @@index([status])
+  @@index([startDate])
+  @@index([endDate])
+}
+
+model CampaignBounty {
+  id         String   @id @default(cuid())
+  campaignId String
+  bountyId   String
+  addedAt    DateTime @default(now())
+
+  campaign Campaign @relation(fields: [campaignId], references: [campaignId])
+
+  @@unique([campaignId, bountyId])
+  @@index([campaignId])
+  @@index([bountyId])
+}
+
+model LeaderboardEntry {
+  id            String   @id @default(cuid())
+  campaignId    String
+  contributorId String
+  earnings      Int      @default(0) // total earnings in this campaign
+  completions   Int      @default(0) // number of completed bounties
+  bonus         Int      @default(0) // bonus percentage (0, 5, 10, 15)
+  rank          Int      @default(0) // 1st, 2nd, 3rd place
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  campaign Campaign @relation(fields: [campaignId], references: [campaignId])
+
+  @@unique([campaignId, contributorId])
+  @@index([campaignId])
+  @@index([rank])
+}

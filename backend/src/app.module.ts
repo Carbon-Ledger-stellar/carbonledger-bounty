@@ -9,6 +9,7 @@ import { RetirementsModule } from './retirements/retirements.module';
 import { OracleModule } from './oracle/oracle.module';
 import { StatsModule } from './stats/stats.module';
 import { FraudModule } from './fraud/fraud.module';
+import { CampaignsModule } from './campaigns/campaigns.module';
 import { PrismaService } from './prisma.service';
 
 @Module({
@@ -26,6 +27,7 @@ import { PrismaService } from './prisma.service';
     OracleModule,
     StatsModule,
     FraudModule,
+    CampaignsModule,
   ],
   providers: [PrismaService],
   exports: [PrismaService],
