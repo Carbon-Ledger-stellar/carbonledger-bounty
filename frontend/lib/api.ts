@@ -173,3 +173,72 @@ export interface OracleStatus {
 export function useOracleStatus(projectId: string) {
   return useSWR<OracleStatus>(`${API_URL}/oracle/status/${projectId}`, fetcher);
 }
+
+// ── Bounty Marketplace ──────────────────────────────────────────────────────
+
+export type Difficulty = 'beginner' | 'intermediate' | 'advanced' | 'expert';
+export type BountyStatus = 'open' | 'in_progress' | 'closed' | 'cancelled';
+
+export interface Bounty {
+  id: string;
+  title: string;
+  description: string;
+  requirements: string[];
+  acceptanceCriteria: string[];
+  rewardUsd: number;
+  difficulty: Difficulty;
+  deadline: string;
+  bountyType: string;
+  status: BountyStatus;
+  reviewerAddress: string;
+  reviewerGithub?: string;
+  tags: string[];
+  isInternal: boolean;
+  featured: boolean;
+  applicationCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BountyListResponse {
+  data: Bounty[];
+  total: number;
+  page: number;
+  totalPages: number;
+  limit: number;
+}
+
+export function useBounties(params?: {
+  sort?: string;
+  order?: 'asc' | 'desc';
+  difficulty?: Difficulty;
+  minReward?: number;
+  maxReward?: number;
+  tag?: string;
+  search?: string;
+  page?: number;
+  limit?: number;
+}) {
+  const query = new URLSearchParams(
+    Object.entries(params || {})
+      .filter(([, v]) => v != null && v !== '')
+      .map(([k, v]) => [k, String(v)]),
+  ).toString();
+  return useSWR<BountyListResponse>(`${API_URL}/bounties?${query}`, fetcher);
+}
+
+export function useTrendingBounties(limit = 10) {
+  return useSWR<Bounty[]>(`${API_URL}/bounties/trending?limit=${limit}`, fetcher);
+}
+
+export function useRecentBounties(limit = 10) {
+  return useSWR<Bounty[]>(`${API_URL}/bounties/recent?limit=${limit}`, fetcher);
+}
+
+export function useFeaturedBounties() {
+  return useSWR<Bounty[]>(`${API_URL}/bounties/featured`, fetcher);
+}
+
+export function useBounty(id: string) {
+  return useSWR<Bounty>(id ? `${API_URL}/bounties/${id}` : null, fetcher);
+}
