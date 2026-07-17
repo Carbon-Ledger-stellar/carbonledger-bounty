@@ -8,6 +8,7 @@ import { MarketplaceModule } from './marketplace/marketplace.module';
 import { RetirementsModule } from './retirements/retirements.module';
 import { OracleModule } from './oracle/oracle.module';
 import { StatsModule } from './stats/stats.module';
+import { BountiesModule } from './bounties/bounties.module';
 import { PrismaService } from './prisma.service';
 
 @Module({
@@ -24,6 +25,7 @@ import { PrismaService } from './prisma.service';
     RetirementsModule,
     OracleModule,
     StatsModule,
+    BountiesModule,
   ],
   providers: [PrismaService],
   exports: [PrismaService],
