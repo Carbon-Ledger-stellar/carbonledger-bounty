@@ -9,7 +9,14 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { BountiesService } from './bounties.service';
-import { CreateBountyDto, FeatureBountyDto, BountyListQueryDto, SortField, Difficulty } from './bounties.dto';
+import {
+  CreateBountyDto,
+  FeatureBountyDto,
+  BountyListQueryDto,
+  OverridePriceDto,
+  SortField,
+  Difficulty,
+} from './bounties.dto';
 
 @Controller('api/v1/bounties')
 export class BountiesController {
@@ -78,6 +85,14 @@ export class BountiesController {
     return this.bountiesService.getDetail(id);
   }
 
+  /**
+   * Current dynamic price breakdown (base, time decay, market adjustment, override).
+   */
+  @Get(':id/pricing')
+  async getPricing(@Param('id') id: string) {
+    return this.bountiesService.getPricingBreakdown(id);
+  }
+
   // ── Protected endpoints (auth required) ────────────────────────────────────
 
   /**
@@ -107,5 +122,15 @@ export class BountiesController {
   async apply(@Param('id') bountyId: string, @Body('applicantId') applicantId: string) {
     this.bountiesService.recordApplication(bountyId, applicantId);
     return { success: true, bountyId };
+  }
+
+  /**
+   * Admin override of a bounty's current price (maintainer/admin only).
+   * Must fall within +/-30% of the market-computed price.
+   */
+  @Post('pricing/override')
+  @UseGuards(AuthGuard('jwt'))
+  async overridePrice(@Body() dto: OverridePriceDto) {
+    return this.bountiesService.overridePrice(dto);
   }
 }

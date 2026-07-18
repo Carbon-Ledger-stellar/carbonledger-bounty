@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
+import type { SignOptions } from 'jsonwebtoken';
 import { AuthModule } from './auth/auth.module';
 import { ProjectsModule } from './projects/projects.module';
 import { CreditsModule } from './credits/credits.module';
@@ -9,6 +10,8 @@ import { RetirementsModule } from './retirements/retirements.module';
 import { OracleModule } from './oracle/oracle.module';
 import { StatsModule } from './stats/stats.module';
 import { FraudModule } from './fraud/fraud.module';
+import { BountiesModule } from './bounties/bounties.module';
+import { FeedModule } from './feed/feed.module';
 import { PrismaService } from './prisma.service';
 
 @Module({
@@ -16,7 +19,7 @@ import { PrismaService } from './prisma.service';
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.register({
       secret: process.env.JWT_SECRET || 'change-me-in-production',
-      signOptions: { expiresIn: process.env.JWT_EXPIRY || '7d' },
+      signOptions: { expiresIn: (process.env.JWT_EXPIRY || '7d') as SignOptions['expiresIn'] },
     }),
     AuthModule,
     ProjectsModule,
@@ -26,6 +29,8 @@ import { PrismaService } from './prisma.service';
     OracleModule,
     StatsModule,
     FraudModule,
+    BountiesModule,
+    FeedModule,
   ],
   providers: [PrismaService],
   exports: [PrismaService],
