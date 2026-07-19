@@ -11,6 +11,7 @@ import { OracleModule } from './oracle/oracle.module';
 import { StatsModule } from './stats/stats.module';
 import { FraudModule } from './fraud/fraud.module';
 import { FeedModule } from './feed/feed.module';
+import { MatchingModule } from './matching/matching.module';
 import { PrismaService } from './prisma.service';
 
 @Module({
@@ -29,6 +30,7 @@ import { PrismaService } from './prisma.service';
     StatsModule,
     FraudModule,
     FeedModule,
+    MatchingModule,
   ],
   providers: [PrismaService],
   exports: [PrismaService],
