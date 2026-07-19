@@ -10,7 +10,6 @@ import { RetirementsModule } from './retirements/retirements.module';
 import { OracleModule } from './oracle/oracle.module';
 import { StatsModule } from './stats/stats.module';
 import { FraudModule } from './fraud/fraud.module';
-import { BountiesModule } from './bounties/bounties.module';
 import { FeedModule } from './feed/feed.module';
 import { PrismaService } from './prisma.service';
 
@@ -29,7 +28,6 @@ import { PrismaService } from './prisma.service';
     OracleModule,
     StatsModule,
     FraudModule,
-    BountiesModule,
     FeedModule,
   ],
   providers: [PrismaService],
