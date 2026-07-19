@@ -5,8 +5,10 @@ import {
   Difficulty,
   FeatureBountyDto,
   BountyListQueryDto,
+  OverridePriceDto,
   SortField,
 } from './bounties.dto';
+import { DIFFICULTY_TO_TIER, PricingBreakdown, PricingService } from './pricing.service';
 
 export interface Bounty {
   id: string;
@@ -25,6 +27,8 @@ export interface Bounty {
   isInternal: boolean;
   featured: boolean;
   applicationCount: number;
+  /** Admin price override in USD, if set (bounded to +/-30% of computed price). */
+  priceOverride?: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -53,7 +57,7 @@ export class BountiesService {
   // Application tracking: bountyId -> list of { applicantId, appliedAt }
   private applications: Map<string, Array<{ applicantId: string; appliedAt: Date }>> = new Map();
 
-  constructor() {
+  constructor(private readonly pricing: PricingService) {
     // Seed some sample bounties for dev/demo
     this.seedSampleBounties();
   }
@@ -177,13 +181,16 @@ export class BountiesService {
    */
   createBounty(dto: CreateBountyDto): Bounty {
     const id = `bounty-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const tier = DIFFICULTY_TO_TIER[dto.difficulty];
+    const basePrice = this.pricing.clampToTier(dto.rewardUsd, tier);
+
     const bounty: Bounty = {
       id,
       title: dto.title,
       description: dto.description,
       requirements: dto.requirements,
       acceptanceCriteria: dto.acceptanceCriteria,
-      rewardUsd: dto.rewardUsd,
+      rewardUsd: basePrice,
       difficulty: dto.difficulty,
       deadline: new Date(dto.deadline),
       bountyType: dto.bountyType,
@@ -239,6 +246,49 @@ export class BountiesService {
     bounty.applicationCount = apps.length;
     bounty.updatedAt = new Date();
     this.bounties.set(bountyId, bounty);
+  }
+
+  // ── Dynamic pricing ─────────────────────────────────────────────────────────
+
+  /**
+   * Current price breakdown for a bounty: base price, time decay, market
+   * adjustment (qualified applicant pool), and any active admin override.
+   */
+  getPricingBreakdown(id: string): PricingBreakdown {
+    const bounty = this.bounties.get(id);
+    if (!bounty) throw new NotFoundException(`Bounty ${id} not found`);
+
+    return this.pricing.computePrice(
+      {
+        basePrice: bounty.rewardUsd,
+        complexityTier: DIFFICULTY_TO_TIER[bounty.difficulty],
+        postedAt: bounty.createdAt,
+        qualifiedApplicantCount: bounty.applicationCount,
+      },
+      bounty.priceOverride,
+    );
+  }
+
+  /**
+   * Admin override of a bounty's price, bounded to +/-30% of the current
+   * market-computed price. Throws if outside bounds.
+   */
+  overridePrice(dto: OverridePriceDto): PricingBreakdown {
+    const bounty = this.bounties.get(dto.bountyId);
+    if (!bounty) throw new NotFoundException(`Bounty ${dto.bountyId} not found`);
+
+    const { computedPrice } = this.pricing.computePrice({
+      basePrice: bounty.rewardUsd,
+      complexityTier: DIFFICULTY_TO_TIER[bounty.difficulty],
+      postedAt: bounty.createdAt,
+      qualifiedApplicantCount: bounty.applicationCount,
+    });
+
+    bounty.priceOverride = this.pricing.validateOverride(computedPrice, dto.price);
+    bounty.updatedAt = new Date();
+    this.bounties.set(dto.bountyId, bounty);
+
+    return this.getPricingBreakdown(dto.bountyId);
   }
 
   // ── Private helpers ─────────────────────────────────────────────────────────
