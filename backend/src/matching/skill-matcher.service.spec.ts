@@ -266,7 +266,7 @@ describe('SkillMatcherService', () => {
 
     it('should sort results by matchScore descending', () => {
       const bounties = [
-        makeBounty({ id: 'b1', tags: ['Soroban'], difficulty: 'senior' }),
+        makeBounty({ id: 'b1', tags: ['Soroban'], difficulty: 'advanced' }),
         makeBounty({ id: 'b2', tags: ['Soroban', 'Rust', 'WASM', 'smart contract testing'], difficulty: 'expert' }),
       ];
       bountiesServiceMock.listPublic.mockReturnValue({ data: bounties, total: 2, page: 1, totalPages: 1, limit: 1000 });
