@@ -106,6 +106,91 @@ model User {
   createdAt DateTime @default(now())
 }
 
+// ---------------------------------------------------------------------------
+// Referral system
+// ---------------------------------------------------------------------------
+
+/// One record per platform contributor (extends User with bounty-platform data).
+model Contributor {
+  id            String   @id @default(cuid())
+  /// Foreign key to User.id (1-to-1)
+  userId        String   @unique
+  /// Unique referral code used in invite links (?ref=<code>)
+  referralCode  String   @unique
+  /// ID of the Contributor who referred this person (null = organic sign-up)
+  referredById  String?
+  /// Total bounties completed on the platform
+  bountiesCompleted Int  @default(0)
+  /// Total bonus USD earned through the referral programme
+  totalBonusEarned  Float @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  referredBy    Contributor?  @relation("ReferralTree", fields: [referredById], references: [id])
+  referrals     Contributor[] @relation("ReferralTree")
+
+  referralBonuses ReferralBonus[]
+  milestones      ReferralMilestone[]
+
+  @@index([referredById])
+  @@index([referralCode])
+}
+
+/// Tracks each bonus payout: 5 % of referred contributor's first 3 bounties.
+model ReferralBonus {
+  id              String   @id @default(cuid())
+  /// Referrer (the person earning the bonus)
+  referrerId      String
+  /// The contributor whose bounty triggered the bonus
+  referredId      String
+  /// ID of the bounty that was completed
+  bountyId        String
+  /// USD value of the bounty that was completed
+  bountyAmountUsd Float
+  /// Bonus amount (5 % of bountyAmountUsd, max $500 total per referrer)
+  bonusAmountUsd  Float
+  /// Which bounty number this is for the referred contributor (1, 2, or 3)
+  bountyNumber    Int
+  status          ReferralBonusStatus @default(PENDING)
+  createdAt       DateTime @default(now())
+  paidAt          DateTime?
+
+  referrer        Contributor @relation(fields: [referrerId], references: [id])
+
+  @@unique([referredId, bountyNumber])
+  @@index([referrerId])
+  @@index([status])
+}
+
+enum ReferralBonusStatus {
+  PENDING
+  PAID
+  CANCELLED
+}
+
+/// Growth-campaign milestones: bonuses for hitting 5 / 10 / 20 referrals.
+model ReferralMilestone {
+  id            String   @id @default(cuid())
+  contributorId String
+  /// 5, 10, or 20
+  milestone     Int
+  bonusAmountUsd Float
+  status        MilestoneStatus @default(PENDING)
+  achievedAt    DateTime @default(now())
+  paidAt        DateTime?
+
+  contributor   Contributor @relation(fields: [contributorId], references: [id])
+
+  @@unique([contributorId, milestone])
+  @@index([contributorId])
+  @@index([status])
+}
+
+enum MilestoneStatus {
+  PENDING
+  PAID
+}
+
 model SupportTicket {
   id              String   @id @default(cuid())
   ticketId        String   @unique
