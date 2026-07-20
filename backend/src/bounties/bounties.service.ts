@@ -1,4 +1,5 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Observable, Subject } from 'rxjs';
 import {
   BountyStatus,
   CreateBountyDto,
@@ -56,6 +57,10 @@ export class BountiesService {
 
   // Application tracking: bountyId -> list of { applicantId, appliedAt }
   private applications: Map<string, Array<{ applicantId: string; appliedAt: Date }>> = new Map();
+
+  private readonly bountyCreated = new Subject<Bounty>();
+  /** Emits on every new bounty — consumed by the taxonomy/search index to stay in real time. */
+  readonly bountyCreated$: Observable<Bounty> = this.bountyCreated.asObservable();
 
   constructor(private readonly pricing: PricingService) {
     // Seed some sample bounties for dev/demo
@@ -207,6 +212,7 @@ export class BountiesService {
 
     this.bounties.set(id, bounty);
     this.logger.log(`Bounty created: ${id} — "${dto.title}" ($${dto.rewardUsd})`);
+    this.bountyCreated.next(bounty);
     return bounty;
   }
 

@@ -13,6 +13,7 @@ import { FraudModule } from './fraud/fraud.module';
 import { FeedModule } from './feed/feed.module';
 import { PortfolioModule } from './portfolio/portfolio.module';
 import { MatchingModule } from './matching/matching.module';
+import { BountyTaxonomyModule } from './taxonomy/bounty-taxonomy.module';
 import { PrismaService } from './prisma.service';
 
 @Module({
@@ -33,6 +34,7 @@ import { PrismaService } from './prisma.service';
     FeedModule,
     PortfolioModule,
     MatchingModule,
+    BountyTaxonomyModule,
   ],
   providers: [PrismaService],
   exports: [PrismaService],
