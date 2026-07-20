@@ -137,3 +137,99 @@ model SupportMetrics {
 
   @@unique([ticketType])
 }
+
+// ── Dispute Resolution System ──────────────────────────────────────────────
+
+/// A dispute raised when a contributor claims work is complete but the
+/// reviewer rejects it.  Lifecycle: opened → under_review → decided →
+/// [appealed → final].
+model Dispute {
+  id              String    @id @default(cuid())
+  disputeId       String    @unique
+  bountyId        String
+  contributorId   String    // the party claiming work is complete
+  reviewerId      String    // the party who rejected the submission
+  arbitratorId    String?   // pre-assigned arbitrator (out-of-scope to assign here)
+  status          String    @default("opened")
+  // opened | under_review | decided | appealed | final
+
+  // Review window
+  reviewDeadline  DateTime  // default: createdAt + 7 days
+  reviewExtended  Boolean   @default(false)
+
+  // Appeal tracking
+  appealCount     Int       @default(0)  // max 1
+  appealedAt      DateTime?
+  appealReason    String?
+
+  // Timestamps
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  decidedAt       DateTime?
+  finalizedAt     DateTime?
+
+  // Relations
+  evidence        Evidence[]
+  decisions       DisputeDecision[]
+  auditLogs       DisputeAuditLog[]
+
+  @@index([bountyId])
+  @@index([contributorId])
+  @@index([arbitratorId])
+  @@index([status])
+}
+
+/// Evidence submitted during a dispute: PR links, test results, docs, comments.
+model Evidence {
+  id          String   @id @default(cuid())
+  evidenceId  String   @unique
+  disputeId   String
+  submittedBy String
+  type        String
+  // pr_link | test_result | documentation | comment | other
+  title       String
+  content     String   // URL or text body
+  metadata    String?  // JSON blob for extra fields (e.g. PR number, test suite)
+  isAppeal    Boolean  @default(false)  // true = submitted as part of the appeal
+  createdAt   DateTime @default(now())
+
+  dispute     Dispute  @relation(fields: [disputeId], references: [disputeId])
+
+  @@index([disputeId])
+  @@index([submittedBy])
+}
+
+/// A binding decision made by the arbitrator (or on appeal).
+model DisputeDecision {
+  id          String   @id @default(cuid())
+  decisionId  String   @unique
+  disputeId   String
+  arbitratorId String
+  decision    String
+  // approved | rejected | partial
+  rationale   String
+  paymentBps  Int      @default(0)
+  // basis points of bounty reward: 10000=full, 5000=half, 0=none
+  isAppeal    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  dispute     Dispute  @relation(fields: [disputeId], references: [disputeId])
+
+  @@index([disputeId])
+}
+
+/// Immutable audit trail: every state transition and action is logged here.
+model DisputeAuditLog {
+  id          String   @id @default(cuid())
+  logId       String   @unique
+  disputeId   String
+  actorId     String
+  action      String   // e.g. DISPUTE_OPENED, EVIDENCE_SUBMITTED, DECISION_MADE, …
+  payload     String?  // JSON snapshot of relevant data at the time
+  createdAt   DateTime @default(now())
+
+  dispute     Dispute  @relation(fields: [disputeId], references: [disputeId])
+
+  @@index([disputeId])
+  @@index([createdAt])
+}
