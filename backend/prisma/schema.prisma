@@ -137,3 +137,84 @@ model SupportMetrics {
 
   @@unique([ticketType])
 }
+
+// ── Reputation System ─────────────────────────────────────────────────────────
+
+/// Tracks a contributor's multi-dimensional reputation on the platform.
+model Contributor {
+  id              String   @id @default(cuid())
+  /// Stellar public key / wallet address uniquely identifies the contributor.
+  walletAddress   String   @unique
+  displayName     String?
+
+  // ── Aggregate reputation score (0–100) ──────────────────────────────────
+  reputationScore Float    @default(50)
+
+  // ── Weighted dimension scores (0–100 each) ──────────────────────────────
+  /// Code quality: reviewer-assigned 5-point scale, weighted 40%.
+  codeQualityScore    Float @default(50)
+  /// Timeliness: 100% on-time, 50% if 1 week late, 0% if >2 weeks late. Weight 30%.
+  timelinessScore     Float @default(50)
+  /// Communication: responsiveness to review comments. Weight 20%.
+  communicationScore  Float @default(50)
+  /// Peer feedback: community ratings. Weight 10%.
+  peerFeedbackScore   Float @default(50)
+
+  // ── Counters for trend analysis ─────────────────────────────────────────
+  totalBountiesCompleted  Int @default(0)
+  totalBountiesOnTime     Int @default(0)
+  totalBountiesLate       Int @default(0)
+  totalBountiesVeryLate   Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  history ReputationHistory[]
+
+  @@index([reputationScore])
+  @@index([walletAddress])
+}
+
+/// Immutable log of every reputation update — enables trend detection and audit.
+model ReputationHistory {
+  id            String   @id @default(cuid())
+  contributorId String
+
+  /// Snapshot of the overall score immediately after this update.
+  scoreBefore   Float
+  scoreAfter    Float
+
+  // ── Dimension snapshots at the time of this event ───────────────────────
+  codeQualityBefore   Float
+  codeQualityAfter    Float
+  timelinessBefore    Float
+  timelinessAfter     Float
+  communicationBefore Float
+  communicationAfter  Float
+  peerFeedbackBefore  Float
+  peerFeedbackAfter   Float
+
+  // ── Input signals that triggered this update ────────────────────────────
+  bountyId            String?
+  /// Reviewer-assigned score on a 1–5 scale.
+  reviewerScore       Float?
+  /// Actual submission date for timeliness calculation.
+  submittedAt         DateTime?
+  /// Original deadline for timeliness calculation.
+  deadlineAt          DateTime?
+  /// Average latency (hours) between review comments posted and contributor replies.
+  avgResponseHours    Float?
+  /// Peer/community rating on a 1–5 scale.
+  peerRating          Float?
+
+  /// Human-readable summary of what changed.
+  changeReason        String?
+
+  createdAt DateTime @default(now())
+
+  contributor Contributor @relation(fields: [contributorId], references: [id])
+
+  @@index([contributorId])
+  @@index([createdAt])
+  @@index([bountyId])
+}
