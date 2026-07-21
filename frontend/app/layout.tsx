@@ -45,6 +45,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <a href="/audit" style={{ color: 'white', textDecoration: 'none', fontWeight: 600 }}>
                 Audit
               </a>
+              <a href="/portfolio" style={{ color: 'white', textDecoration: 'none', fontWeight: 600 }}>
+                Portfolio
+              </a>
+              <a href="/matching" style={{ color: 'white', textDecoration: 'none', fontWeight: 600 }}>
+                Matching
+              </a>
+              <a href="/admin/analytics" style={{ color: colors.primary[500], textDecoration: 'none', fontWeight: 600 }}>
+                Analytics
+              </a>
             </nav>
           </div>
         </header>
