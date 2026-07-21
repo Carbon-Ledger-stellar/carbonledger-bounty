@@ -9,6 +9,7 @@ import {
   SortField,
 } from './bounties.dto';
 import { DIFFICULTY_TO_TIER, PricingBreakdown, PricingService } from './pricing.service';
+import { BudgetService } from '../budget/budget.service';
 
 export interface Bounty {
   id: string;
@@ -57,7 +58,7 @@ export class BountiesService {
   // Application tracking: bountyId -> list of { applicantId, appliedAt }
   private applications: Map<string, Array<{ applicantId: string; appliedAt: Date }>> = new Map();
 
-  constructor(private readonly pricing: PricingService) {
+  constructor(private readonly pricing: PricingService, private readonly budget: BudgetService) {
     // Seed some sample bounties for dev/demo
     this.seedSampleBounties();
   }
@@ -178,8 +179,35 @@ export class BountiesService {
 
   /**
    * Create a new bounty (maintainer only in production).
+   * If budgetProjectId + budgetPeriod are provided, the bounty's reward is
+   * checked against the quarterly budget before creation:
+   *   - Exceeds cap → throws 400
+   *   - Hits 80% warning → logs alert (email sent asynchronously)
    */
-  createBounty(dto: CreateBountyDto): Bounty {
+  async createBounty(dto: CreateBountyDto): Promise<Bounty> {
+    // ── Budget pre-flight ──────────────────────────────────────────────────
+    if (dto.budgetProjectId && dto.budgetPeriod) {
+      const check = await this.budget.checkBudget({
+        projectId: dto.budgetProjectId,
+        period: dto.budgetPeriod,
+        rewardUsd: dto.rewardUsd,
+      });
+
+      if (!check.allowed) {
+        throw new BadRequestException(
+          `Budget check failed: ${check.reason ?? 'Insufficient budget remaining.'}`,
+        );
+      }
+
+      if (check.warning) {
+        this.logger.warn(
+          `Budget warning for ${dto.budgetProjectId}/${dto.budgetPeriod}: ` +
+            `${check.utilizationPct}% utilisation after adding this bounty.`,
+        );
+      }
+    }
+
+    // ── Create bounty ──────────────────────────────────────────────────────
     const id = `bounty-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const tier = DIFFICULTY_TO_TIER[dto.difficulty];
     const basePrice = this.pricing.clampToTier(dto.rewardUsd, tier);
@@ -207,6 +235,12 @@ export class BountiesService {
 
     this.bounties.set(id, bounty);
     this.logger.log(`Bounty created: ${id} — "${dto.title}" ($${dto.rewardUsd})`);
+
+    // ── Record spend against budget ────────────────────────────────────────
+    if (dto.budgetProjectId && dto.budgetPeriod) {
+      await this.budget.recordSpend(dto.budgetProjectId, dto.budgetPeriod, basePrice);
+    }
+
     return bounty;
   }
 
