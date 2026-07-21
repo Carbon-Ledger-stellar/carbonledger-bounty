@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Delete,
   Body,
   Param,
   Query,
@@ -9,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { BountiesService } from './bounties.service';
+import { DependencyService, CreateDependencyDto, RemoveDependencyDto } from './dependency.service';
 import {
   CreateBountyDto,
   FeatureBountyDto,
@@ -20,7 +22,10 @@ import {
 
 @Controller('api/v1/bounties')
 export class BountiesController {
-  constructor(private bountiesService: BountiesService) {}
+  constructor(
+    private bountiesService: BountiesService,
+    private dependencyService: DependencyService,
+  ) {}
 
   // ── Public endpoints (no auth) ─────────────────────────────────────────────
 
@@ -132,5 +137,36 @@ export class BountiesController {
   @UseGuards(AuthGuard('jwt'))
   async overridePrice(@Body() dto: OverridePriceDto) {
     return this.bountiesService.overridePrice(dto);
+  }
+
+  // ── Dependency Management Endpoints ────────────────────────────────────────
+
+  /**
+   * Create a new dependency between bounties (maintainer/admin only).
+   */
+  @Post('dependencies')
+  @UseGuards(AuthGuard('jwt'))
+  async createDependency(@Body() dto: CreateDependencyDto) {
+    return this.dependencyService.createDependency(dto);
+  }
+
+  /**
+   * Remove a dependency between bounties (maintainer/admin only).
+   */
+  @Delete('dependencies')
+  @UseGuards(AuthGuard('jwt'))
+  async removeDependency(@Body() dto: RemoveDependencyDto) {
+    return this.dependencyService.removeDependency(dto);
+  }
+
+  /**
+   * Check if a bounty is locked due to unmet prerequisites.
+   */
+  @Get(':id/locked')
+  async isBountyLocked(@Param('id') id: string) {
+    return { 
+      bountyId: id,
+      isLocked: await this.dependencyService.isBountyLocked(id) 
+    };
   }
 }
