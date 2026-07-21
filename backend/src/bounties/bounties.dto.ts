@@ -6,6 +6,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  Matches,
   Min,
 } from 'class-validator';
 
@@ -60,6 +61,25 @@ export class CreateBountyDto {
   @IsOptional()
   @IsBoolean()
   isInternal?: boolean;
+
+  // ── Budget fields (optional; when provided the system enforces limits) ──────
+
+  /**
+   * Logical project budget pool this bounty draws from.
+   * Examples: "backend", "frontend", "contracts"
+   */
+  @IsOptional()
+  @IsString()
+  budgetProjectId?: string;
+
+  /**
+   * Quarter period for the budget check, e.g. "2026-Q2".
+   * Required when budgetProjectId is set.
+   */
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{4}-Q[1-4]$/, { message: 'budgetPeriod must be in format YYYY-Q[1-4]' })
+  budgetPeriod?: string;
 }
 
 export class FeatureBountyDto {

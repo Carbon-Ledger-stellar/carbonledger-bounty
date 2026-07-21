@@ -138,98 +138,107 @@ model SupportMetrics {
   @@unique([ticketType])
 }
 
-// ── Dispute Resolution System ──────────────────────────────────────────────
+// ── Onboarding & Certification System ─────────────────────────────────────
 
-/// A dispute raised when a contributor claims work is complete but the
-/// reviewer rejects it.  Lifecycle: opened → under_review → decided →
-/// [appealed → final].
-model Dispute {
-  id              String    @id @default(cuid())
-  disputeId       String    @unique
-  bountyId        String
-  contributorId   String    // the party claiming work is complete
-  reviewerId      String    // the party who rejected the submission
-  arbitratorId    String?   // pre-assigned arbitrator (out-of-scope to assign here)
-  status          String    @default("opened")
-  // opened | under_review | decided | appealed | final
+/// Tracks a contributor's overall onboarding state and step completions.
+model OnboardingProgress {
+  id            String    @id @default(cuid())
+  contributorId String    @unique
+  // not_started | in_progress | completed
+  status        String    @default("not_started")
+  completedAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  // Review window
-  reviewDeadline  DateTime  // default: createdAt + 7 days
-  reviewExtended  Boolean   @default(false)
+  steps         OnboardingStep[]
 
-  // Appeal tracking
-  appealCount     Int       @default(0)  // max 1
-  appealedAt      DateTime?
-  appealReason    String?
-
-  // Timestamps
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  decidedAt       DateTime?
-  finalizedAt     DateTime?
-
-  // Relations
-  evidence        Evidence[]
-  decisions       DisputeDecision[]
-  auditLogs       DisputeAuditLog[]
-
-  @@index([bountyId])
   @@index([contributorId])
-  @@index([arbitratorId])
   @@index([status])
 }
 
-/// Evidence submitted during a dispute: PR links, test results, docs, comments.
-model Evidence {
+/// One of the 5 intro onboarding tasks for a contributor.
+model OnboardingStep {
+  id            String    @id @default(cuid())
+  progressId    String
+  stepKey       String
+  // setup | first_pr | testing | documentation | code_review
+  title         String
+  description   String
+  // not_started | in_progress | completed
+  status        String    @default("not_started")
+  completedAt   DateTime?
+  durationMs    Int?      // milliseconds from step start to completion
+
+  progress      OnboardingProgress @relation(fields: [progressId], references: [id])
+
+  @@unique([progressId, stepKey])
+  @@index([progressId])
+}
+
+/// A skill assessment challenge for a given domain.
+model SkillAssessment {
   id          String   @id @default(cuid())
-  evidenceId  String   @unique
-  disputeId   String
-  submittedBy String
-  type        String
-  // pr_link | test_result | documentation | comment | other
+  assessmentId String  @unique
+  domain      String
+  // smart_contracts | frontend | backend
   title       String
-  content     String   // URL or text body
-  metadata    String?  // JSON blob for extra fields (e.g. PR number, test suite)
-  isAppeal    Boolean  @default(false)  // true = submitted as part of the appeal
+  description String
+  // description of what is tested — actual quiz content is external
+  maxScore    Int      @default(100)
+  passingScore Int     @default(80)
   createdAt   DateTime @default(now())
 
-  dispute     Dispute  @relation(fields: [disputeId], references: [disputeId])
+  attempts    AssessmentAttempt[]
 
-  @@index([disputeId])
-  @@index([submittedBy])
+  @@index([domain])
 }
 
-/// A binding decision made by the arbitrator (or on appeal).
-model DisputeDecision {
-  id          String   @id @default(cuid())
-  decisionId  String   @unique
-  disputeId   String
-  arbitratorId String
-  decision    String
-  // approved | rejected | partial
-  rationale   String
-  paymentBps  Int      @default(0)
-  // basis points of bounty reward: 10000=full, 5000=half, 0=none
-  isAppeal    Boolean  @default(false)
-  createdAt   DateTime @default(now())
+/// A contributor's attempt at a skill assessment.
+model AssessmentAttempt {
+  id            String   @id @default(cuid())
+  attemptId     String   @unique
+  assessmentId  String
+  contributorId String
+  score         Int      // 0-100, submitted by the quiz engine
+  passed        Boolean
+  startedAt     DateTime
+  completedAt   DateTime @default(now())
 
-  dispute     Dispute  @relation(fields: [disputeId], references: [disputeId])
+  assessment    SkillAssessment @relation(fields: [assessmentId], references: [assessmentId])
 
-  @@index([disputeId])
+  @@index([assessmentId])
+  @@index([contributorId])
 }
 
-/// Immutable audit trail: every state transition and action is logged here.
-model DisputeAuditLog {
-  id          String   @id @default(cuid())
-  logId       String   @unique
-  disputeId   String
-  actorId     String
-  action      String   // e.g. DISPUTE_OPENED, EVIDENCE_SUBMITTED, DECISION_MADE, …
-  payload     String?  // JSON snapshot of relevant data at the time
-  createdAt   DateTime @default(now())
+/// A certification awarded to a contributor for a given domain.
+/// Valid for 1 year from issuedAt.
+model Certification {
+  id              String   @id @default(cuid())
+  certificationId String   @unique
+  contributorId   String
+  domain          String
+  // smart_contracts | frontend | backend | general
+  issuedAt        DateTime @default(now())
+  expiresAt       DateTime
+  // issuedAt + 1 year
+  revokedAt       DateTime?
+  highestScore    Int      // best passing score that triggered certification
 
-  dispute     Dispute  @relation(fields: [disputeId], references: [disputeId])
+  @@unique([contributorId, domain])
+  @@index([contributorId])
+  @@index([expiresAt])
+}
 
-  @@index([disputeId])
-  @@index([createdAt])
+/// A badge awarded to a contributor for reaching a milestone.
+model ContributorBadge {
+  id            String   @id @default(cuid())
+  badgeId       String   @unique
+  contributorId String
+  badge         String
+  // first_contribution | first_certification | mentor_others
+  awardedAt     DateTime @default(now())
+  metadata      String?  // JSON: extra context (e.g. which bounty, which certification)
+
+  @@unique([contributorId, badge])
+  @@index([contributorId])
 }
