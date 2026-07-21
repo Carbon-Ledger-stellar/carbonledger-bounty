@@ -190,7 +190,7 @@ export class PortfolioService {
     return profile;
   }
 
-  addToPipeline(contributorId: string, bountyId: string, stage: PipelineStage): PipelineItem {
+  async addToPipeline(contributorId: string, bountyId: string, stage: PipelineStage): Promise<PipelineItem> {
     this.ensureProfile(contributorId);
 
     const items = this.pipeline.get(contributorId) ?? [];
@@ -204,7 +204,7 @@ export class PortfolioService {
     let rewardUsd = 0;
     let tags: string[] = [];
     try {
-      const bounty = this.bountiesService.getDetail(bountyId);
+      const bounty = await this.bountiesService.getDetail(bountyId);
       bountyTitle = bounty.title;
       rewardUsd = bounty.rewardUsd;
       tags = bounty.tags;

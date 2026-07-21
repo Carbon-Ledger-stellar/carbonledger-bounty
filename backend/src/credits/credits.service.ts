@@ -119,7 +119,7 @@ export class CreditsService {
         beneficiary: dto.beneficiary,
         retirementReason: dto.retirementReason,
         vintageYear: batch.vintageYear,
-        serialNumbers,
+        serialNumbers: JSON.stringify(serialNumbers),
         txHash: 'TX_HASH', // Set from Soroban tx result
       },
     });
@@ -177,7 +177,7 @@ export class CreditsService {
     const retirement = await this.prisma.retirementRecord.findFirst({
       where: {
         serialNumbers: {
-          has: serial,
+          contains: `"${serial}"`,
         },
       },
     });

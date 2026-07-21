@@ -9,9 +9,9 @@ import {
   UseGuards,
   Request,
 } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
 import { SupportTicketService } from './support-ticket.service';
 import { CreateSupportTicketDto, UpdateSupportTicketDto } from './support.dto';
-import { JwtAuthGuard } from '../auth/jwt.strategy';
 
 @Controller('api/v1/support')
 export class SupportTicketController {
@@ -21,7 +21,7 @@ export class SupportTicketController {
    * Create a new support ticket (contributor)
    */
   @Post('tickets')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AuthGuard('jwt'))
   async createTicket(@Body() dto: CreateSupportTicketDto, @Request() req) {
     return this.supportService.createTicket(dto, req.user.publicKey);
   }
@@ -56,7 +56,7 @@ export class SupportTicketController {
    * Update a support ticket (maintainer acknowledges or resolves)
    */
   @Put('tickets/:ticketId')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(AuthGuard('jwt'))
   async updateTicket(
     @Param('ticketId') ticketId: string,
     @Body() dto: UpdateSupportTicketDto,

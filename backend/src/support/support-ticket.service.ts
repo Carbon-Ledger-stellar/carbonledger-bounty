@@ -5,7 +5,6 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { CreateSupportTicketDto, UpdateSupportTicketDto } from './support.dto';
-import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
 export class SupportTicketService {
@@ -18,7 +17,7 @@ export class SupportTicketService {
     dto: CreateSupportTicketDto,
     contributorId: string,
   ) {
-    const ticketId = `ticket-${uuidv4()}`;
+    const ticketId = `ticket-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
     const ticket = await this.prisma.supportTicket.create({
       data: {
@@ -29,7 +28,7 @@ export class SupportTicketService {
         status: 'open',
         title: dto.title,
         description: dto.description,
-        attachments: dto.attachments || [],
+        attachments: JSON.stringify(dto.attachments || []),
       },
     });
 

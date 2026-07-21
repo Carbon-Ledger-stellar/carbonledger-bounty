@@ -640,3 +640,4 @@ export class BountiesService {
 
     this.logger.log(`Seeded ${createdBounties.length} sample bounties with dependencies`);
   }
+}
