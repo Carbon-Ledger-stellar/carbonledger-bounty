@@ -242,3 +242,136 @@ export function useFeaturedBounties() {
 export function useBounty(id: string) {
   return useSWR<Bounty>(id ? `${API_URL}/bounties/${id}` : null, fetcher);
 }
+
+// ── Analytics (maintainer only) ──────────────────────────────────────────────
+
+const authFetcher = (token: string) => async (url: string) => {
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`Analytics fetch failed: ${res.status}`);
+  return res.json();
+};
+
+export interface CoreMetrics {
+  bountiesOpen: number;
+  applicationsPending: number;
+  avgVelocityHours: number | null;
+  completionRate: number;
+  avgTimeToCompleteHours: number | null;
+  costPerTask: number | null;
+  totalCompletions: number;
+  totalPayoutsUsd: number;
+  uniqueContributors: number;
+  computedAt: string;
+}
+
+export interface TrendPoint {
+  date: string;
+  bountiesOpen: number;
+  completions: number;
+  applicationsPending: number;
+  avgVelocityHours: number | null;
+}
+
+export interface TrendAnalysis {
+  window: '7d' | '30d' | '90d';
+  points: TrendPoint[];
+  completionVelocityTrend: 'accelerating' | 'decelerating' | 'stable';
+  completionGrowthPct: number;
+  previousWindowAvgCompletions: number;
+  currentWindowAvgCompletions: number;
+  comparison: {
+    '7d': { completions: number; avgVelocity: number | null };
+    '30d': { completions: number; avgVelocity: number | null };
+    '90d': { completions: number; avgVelocity: number | null };
+  };
+}
+
+export interface CohortRow {
+  cohortMonth: string;
+  contributorsInCohort: number;
+  returnedFor2nd: number;
+  returnedFor2ndPct: number;
+  returnedFor3rd: number;
+  returnedFor3rdPct: number;
+}
+
+export interface RetentionData {
+  cohorts: CohortRow[];
+  overallRetentionFor2nd: number;
+  overallRetentionFor3rd: number;
+}
+
+export interface DistributionBucket {
+  rank: number;
+  contributorId: string;
+  totalEarnedUsd: number;
+  completions: number;
+  pctOfTotalPayout: number;
+}
+
+export interface PaymentDistribution {
+  topPercentile: number;
+  topPercentileEarningsPct: number;
+  totalPayoutsUsd: number;
+  totalContributors: number;
+  buckets: DistributionBucket[];
+  giniCoefficient: number;
+}
+
+export interface AnalyticsSnapshot {
+  snapshotAt: string;
+  bountiesOpen: number;
+  bountiesCompleted: number;
+  applicationsPending: number;
+  avgTimeToCompleteHours: number | null;
+  completionRate: number | null;
+  costPerTask: number | null;
+  totalPayoutsUsd: number;
+  uniqueContributorsEver: number;
+}
+
+export function useAnalyticsMetrics(token: string | null) {
+  return useSWR<CoreMetrics>(
+    token ? `${API_URL}/analytics/metrics` : null,
+    authFetcher(token ?? ''),
+    { refreshInterval: 60_000 },
+  );
+}
+
+export function useAnalyticsTrends(token: string | null, window: '7d' | '30d' | '90d' = '30d') {
+  return useSWR<TrendAnalysis>(
+    token ? `${API_URL}/analytics/trends?window=${window}` : null,
+    authFetcher(token ?? ''),
+  );
+}
+
+export function useAnalyticsRetention(token: string | null) {
+  return useSWR<RetentionData>(
+    token ? `${API_URL}/analytics/retention` : null,
+    authFetcher(token ?? ''),
+  );
+}
+
+export function useAnalyticsDistribution(token: string | null) {
+  return useSWR<PaymentDistribution>(
+    token ? `${API_URL}/analytics/distribution` : null,
+    authFetcher(token ?? ''),
+  );
+}
+
+export function useAnalyticsSnapshots(token: string | null, limit = 48) {
+  return useSWR<AnalyticsSnapshot[]>(
+    token ? `${API_URL}/analytics/snapshots?limit=${limit}` : null,
+    authFetcher(token ?? ''),
+  );
+}
+
+export function analyticsReportUrl(
+  type: 'pdf' | 'csv',
+  period: 'weekly' | 'monthly' | 'quarterly',
+  token: string,
+): string {
+  return `${API_URL}/analytics/report/${type}?period=${period}&token=${encodeURIComponent(token)}`;
+}

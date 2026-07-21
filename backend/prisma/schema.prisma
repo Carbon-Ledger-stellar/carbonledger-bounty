@@ -222,3 +222,108 @@ model SupportMetrics {
 
   @@unique([ticketType])
 }
+
+// ── Onboarding & Certification System ─────────────────────────────────────
+
+/// Tracks a contributor's overall onboarding state and step completions.
+model OnboardingProgress {
+  id            String    @id @default(cuid())
+  contributorId String    @unique
+  // not_started | in_progress | completed
+  status        String    @default("not_started")
+  completedAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  steps         OnboardingStep[]
+
+  @@index([contributorId])
+  @@index([status])
+}
+
+/// One of the 5 intro onboarding tasks for a contributor.
+model OnboardingStep {
+  id            String    @id @default(cuid())
+  progressId    String
+  stepKey       String
+  // setup | first_pr | testing | documentation | code_review
+  title         String
+  description   String
+  // not_started | in_progress | completed
+  status        String    @default("not_started")
+  completedAt   DateTime?
+  durationMs    Int?      // milliseconds from step start to completion
+
+  progress      OnboardingProgress @relation(fields: [progressId], references: [id])
+
+  @@unique([progressId, stepKey])
+  @@index([progressId])
+}
+
+/// A skill assessment challenge for a given domain.
+model SkillAssessment {
+  id          String   @id @default(cuid())
+  assessmentId String  @unique
+  domain      String
+  // smart_contracts | frontend | backend
+  title       String
+  description String
+  // description of what is tested — actual quiz content is external
+  maxScore    Int      @default(100)
+  passingScore Int     @default(80)
+  createdAt   DateTime @default(now())
+
+  attempts    AssessmentAttempt[]
+
+  @@index([domain])
+}
+
+/// A contributor's attempt at a skill assessment.
+model AssessmentAttempt {
+  id            String   @id @default(cuid())
+  attemptId     String   @unique
+  assessmentId  String
+  contributorId String
+  score         Int      // 0-100, submitted by the quiz engine
+  passed        Boolean
+  startedAt     DateTime
+  completedAt   DateTime @default(now())
+
+  assessment    SkillAssessment @relation(fields: [assessmentId], references: [assessmentId])
+
+  @@index([assessmentId])
+  @@index([contributorId])
+}
+
+/// A certification awarded to a contributor for a given domain.
+/// Valid for 1 year from issuedAt.
+model Certification {
+  id              String   @id @default(cuid())
+  certificationId String   @unique
+  contributorId   String
+  domain          String
+  // smart_contracts | frontend | backend | general
+  issuedAt        DateTime @default(now())
+  expiresAt       DateTime
+  // issuedAt + 1 year
+  revokedAt       DateTime?
+  highestScore    Int      // best passing score that triggered certification
+
+  @@unique([contributorId, domain])
+  @@index([contributorId])
+  @@index([expiresAt])
+}
+
+/// A badge awarded to a contributor for reaching a milestone.
+model ContributorBadge {
+  id            String   @id @default(cuid())
+  badgeId       String   @unique
+  contributorId String
+  badge         String
+  // first_contribution | first_certification | mentor_others
+  awardedAt     DateTime @default(now())
+  metadata      String?  // JSON: extra context (e.g. which bounty, which certification)
+
+  @@unique([contributorId, badge])
+  @@index([contributorId])
+}
