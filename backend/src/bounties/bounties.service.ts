@@ -1,4 +1,5 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Observable, Subject } from 'rxjs';
 import {
   BountyStatus,
   CreateBountyDto,
