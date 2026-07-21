@@ -15,6 +15,7 @@ import { PortfolioModule } from './portfolio/portfolio.module';
 import { MatchingModule } from './matching/matching.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { MentorshipModule } from './mentorship/mentorship.module';
+import { BudgetModule } from './budget/budget.module';
 import { PrismaService } from './prisma.service';
 
 @Module({
@@ -37,6 +38,7 @@ import { PrismaService } from './prisma.service';
     MatchingModule,
     AnalyticsModule,
     MentorshipModule,
+    BudgetModule,
   ],
   providers: [PrismaService],
   exports: [PrismaService],

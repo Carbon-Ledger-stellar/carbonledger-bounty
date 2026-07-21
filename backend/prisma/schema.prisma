@@ -204,3 +204,55 @@ model AnalyticsSnapshot {
 
   @@index([snapshotAt])
 }
+
+// ── Budget Funding Models ──────────────────────────────────────────────────
+
+/// Quarterly budget allocation for a project (backend / frontend / contracts)
+model ProjectBudget {
+  id        String   @id @default(cuid())
+  projectId String   // logical project identifier e.g. "backend", "frontend", "contracts"
+  period    String   // e.g. "2026-Q1" — year + quarter
+  amount    Float    // total allocated budget in USD
+  spent     Float    @default(0) // cumulative spend drawn by bounties
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  overrides BudgetOverride[]
+  alerts    BudgetAlert[]
+
+  @@unique([projectId, period])
+  @@index([projectId])
+  @@index([period])
+}
+
+/// Approved override allowing spend beyond the hard cap (max +20% above amount)
+model BudgetOverride {
+  id             String        @id @default(cuid())
+  budgetId       String
+  approvedBy     String        // maintainer / admin identifier
+  amountApproved Float         // additional USD approved above the base amount
+  reason         String        // documented justification for the override
+  bountyId       String?       // optional link to the triggering bounty
+  createdAt      DateTime      @default(now())
+
+  budget ProjectBudget @relation(fields: [budgetId], references: [id])
+
+  @@index([budgetId])
+}
+
+/// Alert events recorded when budget crosses utilisation thresholds
+model BudgetAlert {
+  id         String   @id @default(cuid())
+  budgetId   String
+  alertType  String   // "warning" (80%) | "freeze" (100%)
+  utilization Float   // utilisation ratio at time of alert (0–1+)
+  message    String
+  notified   Boolean  @default(false) // whether maintainers have been emailed
+  createdAt  DateTime @default(now())
+
+  budget ProjectBudget @relation(fields: [budgetId], references: [id])
+
+  @@index([budgetId])
+  @@index([alertType])
+  @@index([createdAt])
+}
