@@ -138,121 +138,107 @@ model SupportMetrics {
   @@unique([ticketType])
 }
 
-// ── Bounty Analytics Models ────────────────────────────────────────────────
+// ── Onboarding & Certification System ─────────────────────────────────────
 
-/// Tracks each application submitted to a bounty
-model BountyApplication {
+/// Tracks a contributor's overall onboarding state and step completions.
+model OnboardingProgress {
   id            String    @id @default(cuid())
-  bountyId      String
-  bountyTitle   String
-  applicantId   String    // public key / contributor identifier
-  rewardUsd     Float
-  difficulty    String    // beginner | intermediate | advanced | expert
-  bountyType    String
-  status        String    @default("pending") // pending | accepted | rejected | withdrawn
-  appliedAt     DateTime  @default(now())
-  acceptedAt    DateTime?
+  contributorId String    @unique
+  // not_started | in_progress | completed
+  status        String    @default("not_started")
   completedAt   DateTime?
-  rejectedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  @@index([bountyId])
-  @@index([applicantId])
-  @@index([status])
-  @@index([appliedAt])
-}
-
-/// Records completed bounty payouts
-model BountyCompletion {
-  id            String   @id @default(cuid())
-  bountyId      String
-  bountyTitle   String
-  contributorId String   // public key / contributor identifier
-  rewardUsd     Float
-  difficulty    String
-  bountyType    String
-  startedAt     DateTime // when work began (application accepted)
-  completedAt   DateTime @default(now())
-  hoursToComplete Float? // calculated: completedAt - startedAt in hours
+  steps         OnboardingStep[]
 
   @@index([contributorId])
-  @@index([bountyId])
-  @@index([completedAt])
+  @@index([status])
 }
 
-/// Hourly analytics snapshot for trend analysis
-model AnalyticsSnapshot {
-  id                  String   @id @default(cuid())
-  snapshotAt          DateTime @default(now())
+/// One of the 5 intro onboarding tasks for a contributor.
+model OnboardingStep {
+  id            String    @id @default(cuid())
+  progressId    String
+  stepKey       String
+  // setup | first_pr | testing | documentation | code_review
+  title         String
+  description   String
+  // not_started | in_progress | completed
+  status        String    @default("not_started")
+  completedAt   DateTime?
+  durationMs    Int?      // milliseconds from step start to completion
 
-  // Core metrics
-  bountiesOpen        Int      @default(0)
-  bountiesCompleted   Int      @default(0)
-  bountiesCancelled   Int      @default(0)
-  applicationsPending Int      @default(0)
-  applicationsTotal   Int      @default(0)
+  progress      OnboardingProgress @relation(fields: [progressId], references: [id])
 
-  // Velocity
-  avgTimeToCompleteHours Float? // avg hours from start to completion
-  completionRate      Float?   // completions / total closed in period
-  costPerTask         Float?   // total payouts / total completions
-
-  // Cumulative totals at snapshot time
-  totalBountiesEver       Int    @default(0)
-  totalCompletionsEver    Int    @default(0)
-  totalPayoutsUsd         Float  @default(0)
-  uniqueContributorsEver  Int    @default(0)
-
-  @@index([snapshotAt])
+  @@unique([progressId, stepKey])
+  @@index([progressId])
 }
 
-// ── Budget Funding Models ──────────────────────────────────────────────────
+/// A skill assessment challenge for a given domain.
+model SkillAssessment {
+  id          String   @id @default(cuid())
+  assessmentId String  @unique
+  domain      String
+  // smart_contracts | frontend | backend
+  title       String
+  description String
+  // description of what is tested — actual quiz content is external
+  maxScore    Int      @default(100)
+  passingScore Int     @default(80)
+  createdAt   DateTime @default(now())
 
-/// Quarterly budget allocation for a project (backend / frontend / contracts)
-model ProjectBudget {
-  id        String   @id @default(cuid())
-  projectId String   // logical project identifier e.g. "backend", "frontend", "contracts"
-  period    String   // e.g. "2026-Q1" — year + quarter
-  amount    Float    // total allocated budget in USD
-  spent     Float    @default(0) // cumulative spend drawn by bounties
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  attempts    AssessmentAttempt[]
 
-  overrides BudgetOverride[]
-  alerts    BudgetAlert[]
-
-  @@unique([projectId, period])
-  @@index([projectId])
-  @@index([period])
+  @@index([domain])
 }
 
-/// Approved override allowing spend beyond the hard cap (max +20% above amount)
-model BudgetOverride {
-  id             String        @id @default(cuid())
-  budgetId       String
-  approvedBy     String        // maintainer / admin identifier
-  amountApproved Float         // additional USD approved above the base amount
-  reason         String        // documented justification for the override
-  bountyId       String?       // optional link to the triggering bounty
-  createdAt      DateTime      @default(now())
+/// A contributor's attempt at a skill assessment.
+model AssessmentAttempt {
+  id            String   @id @default(cuid())
+  attemptId     String   @unique
+  assessmentId  String
+  contributorId String
+  score         Int      // 0-100, submitted by the quiz engine
+  passed        Boolean
+  startedAt     DateTime
+  completedAt   DateTime @default(now())
 
-  budget ProjectBudget @relation(fields: [budgetId], references: [id])
+  assessment    SkillAssessment @relation(fields: [assessmentId], references: [assessmentId])
 
-  @@index([budgetId])
+  @@index([assessmentId])
+  @@index([contributorId])
 }
 
-/// Alert events recorded when budget crosses utilisation thresholds
-model BudgetAlert {
-  id         String   @id @default(cuid())
-  budgetId   String
-  alertType  String   // "warning" (80%) | "freeze" (100%)
-  utilization Float   // utilisation ratio at time of alert (0–1+)
-  message    String
-  notified   Boolean  @default(false) // whether maintainers have been emailed
-  createdAt  DateTime @default(now())
+/// A certification awarded to a contributor for a given domain.
+/// Valid for 1 year from issuedAt.
+model Certification {
+  id              String   @id @default(cuid())
+  certificationId String   @unique
+  contributorId   String
+  domain          String
+  // smart_contracts | frontend | backend | general
+  issuedAt        DateTime @default(now())
+  expiresAt       DateTime
+  // issuedAt + 1 year
+  revokedAt       DateTime?
+  highestScore    Int      // best passing score that triggered certification
 
-  budget ProjectBudget @relation(fields: [budgetId], references: [id])
+  @@unique([contributorId, domain])
+  @@index([contributorId])
+  @@index([expiresAt])
+}
 
-  @@index([budgetId])
-  @@index([alertType])
-  @@index([createdAt])
+/// A badge awarded to a contributor for reaching a milestone.
+model ContributorBadge {
+  id            String   @id @default(cuid())
+  badgeId       String   @unique
+  contributorId String
+  badge         String
+  // first_contribution | first_certification | mentor_others
+  awardedAt     DateTime @default(now())
+  metadata      String?  // JSON: extra context (e.g. which bounty, which certification)
+
+  @@unique([contributorId, badge])
+  @@index([contributorId])
 }

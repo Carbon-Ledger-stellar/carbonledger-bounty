@@ -13,9 +13,7 @@ import { FraudModule } from './fraud/fraud.module';
 import { FeedModule } from './feed/feed.module';
 import { PortfolioModule } from './portfolio/portfolio.module';
 import { MatchingModule } from './matching/matching.module';
-import { AnalyticsModule } from './analytics/analytics.module';
-import { MentorshipModule } from './mentorship/mentorship.module';
-import { BudgetModule } from './budget/budget.module';
+import { OnboardingModule } from './onboarding/onboarding.module';
 import { PrismaService } from './prisma.service';
 
 @Module({
@@ -36,9 +34,7 @@ import { PrismaService } from './prisma.service';
     FeedModule,
     PortfolioModule,
     MatchingModule,
-    AnalyticsModule,
-    MentorshipModule,
-    BudgetModule,
+    OnboardingModule,
   ],
   providers: [PrismaService],
   exports: [PrismaService],
