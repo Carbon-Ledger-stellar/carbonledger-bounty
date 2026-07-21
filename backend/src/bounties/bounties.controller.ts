@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Delete,
   Body,
   Param,
   Query,
@@ -9,18 +10,24 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { BountiesService } from './bounties.service';
+import { DependencyService } from './dependency.service';
 import {
   CreateBountyDto,
   FeatureBountyDto,
   BountyListQueryDto,
   OverridePriceDto,
+  CreateDependencyDto,
+  RemoveDependencyDto,
   SortField,
   Difficulty,
 } from './bounties.dto';
 
 @Controller('api/v1/bounties')
 export class BountiesController {
-  constructor(private bountiesService: BountiesService) {}
+  constructor(
+    private bountiesService: BountiesService,
+    private dependencyService: DependencyService,
+  ) {}
 
   // ── Public endpoints (no auth) ─────────────────────────────────────────────
 
@@ -78,11 +85,27 @@ export class BountiesController {
   }
 
   /**
+   * Get dependency graph for visualization.
+   */
+  @Get('dependencies/graph')
+  async getDependencyGraph(@Query('bountyId') bountyId?: string) {
+    return this.dependencyService.getDependencyGraph(bountyId);
+  }
+
+  /**
    * Full detail page for a single bounty.
    */
   @Get(':id')
   async getDetail(@Param('id') id: string) {
     return this.bountiesService.getDetail(id);
+  }
+
+  /**
+   * Get all dependencies for a specific bounty.
+   */
+  @Get(':id/dependencies')
+  async getBountyDependencies(@Param('id') id: string) {
+    return this.dependencyService.getBountyDependencies(id);
   }
 
   /**
@@ -114,6 +137,15 @@ export class BountiesController {
   }
 
   /**
+   * Create a new dependency between bounties (maintainer/admin only).
+   */
+  @Post('dependencies')
+  @UseGuards(AuthGuard('jwt'))
+  async createDependency(@Body() dto: CreateDependencyDto) {
+    return this.dependencyService.createDependency(dto);
+  }
+
+  /**
    * Record a bounty application (authenticated contributors only).
    * Full application logic handled separately.
    */
@@ -132,5 +164,14 @@ export class BountiesController {
   @UseGuards(AuthGuard('jwt'))
   async overridePrice(@Body() dto: OverridePriceDto) {
     return this.bountiesService.overridePrice(dto);
+  }
+
+  /**
+   * Remove a dependency between bounties (maintainer/admin only).
+   */
+  @Delete('dependencies')
+  @UseGuards(AuthGuard('jwt'))
+  async removeDependency(@Body() dto: RemoveDependencyDto) {
+    return this.dependencyService.removeDependency(dto);
   }
 }

@@ -198,6 +198,22 @@ export interface Bounty {
   applicationCount: number;
   createdAt: string;
   updatedAt: string;
+  /** Prerequisites that must be completed before this bounty can be claimed */
+  prerequisites?: BountyDependency[];
+  /** Bounties that depend on this one */
+  dependents?: BountyDependency[];
+  /** Whether this bounty is currently locked due to unmet prerequisites */
+  isLocked?: boolean;
+}
+
+export interface BountyDependency {
+  id: string;
+  prerequisiteBountyId: string;
+  dependentBountyId: string;
+  isRequired: boolean;
+  createdAt: string;
+  prerequisiteBounty?: Bounty;
+  dependentBounty?: Bounty;
 }
 
 export interface BountyListResponse {
@@ -241,4 +257,38 @@ export function useFeaturedBounties() {
 
 export function useBounty(id: string) {
   return useSWR<Bounty>(id ? `${API_URL}/bounties/${id}` : null, fetcher);
+}
+
+// Dependency management hooks
+export function useBountyDependencies(id: string) {
+  return useSWR(`${API_URL}/bounties/${id}/dependencies`, fetcher);
+}
+
+export function useDependencyGraph(bountyId?: string) {
+  const url = bountyId 
+    ? `${API_URL}/bounties/dependencies/graph?bountyId=${bountyId}`
+    : `${API_URL}/bounties/dependencies/graph`;
+  return useSWR(url, fetcher);
+}
+
+export async function createDependency(prerequisiteBountyId: string, dependentBountyId: string, isRequired = true) {
+  const response = await fetch(`${API_URL}/bounties/dependencies`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prerequisiteBountyId, dependentBountyId, isRequired }),
+  });
+  
+  if (!response.ok) throw new Error('Failed to create dependency');
+  return response.json();
+}
+
+export async function removeDependency(prerequisiteBountyId: string, dependentBountyId: string) {
+  const response = await fetch(`${API_URL}/bounties/dependencies`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prerequisiteBountyId, dependentBountyId }),
+  });
+  
+  if (!response.ok) throw new Error('Failed to remove dependency');
+  return response.json();
 }

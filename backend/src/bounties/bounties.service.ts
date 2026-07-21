@@ -9,6 +9,8 @@ import {
   SortField,
 } from './bounties.dto';
 import { DIFFICULTY_TO_TIER, PricingBreakdown, PricingService } from './pricing.service';
+import { PrismaService } from '../prisma.service';
+import { DependencyService } from './dependency.service';
 
 export interface Bounty {
   id: string;
@@ -31,6 +33,22 @@ export interface Bounty {
   priceOverride?: number;
   createdAt: Date;
   updatedAt: Date;
+  /** Prerequisites that must be completed before this bounty can be claimed */
+  prerequisites?: BountyDependency[];
+  /** Bounties that depend on this one */
+  dependents?: BountyDependency[];
+  /** Whether this bounty is currently locked due to unmet prerequisites */
+  isLocked?: boolean;
+}
+
+export interface BountyDependency {
+  id: string;
+  prerequisiteBountyId: string;
+  dependentBountyId: string;
+  isRequired: boolean;
+  createdAt: Date;
+  prerequisiteBounty?: Bounty;
+  dependentBounty?: Bounty;
 }
 
 // Max featured bounties shown in the marketplace
@@ -51,13 +69,11 @@ const DIFFICULTY_RANK: Record<Difficulty, number> = {
 export class BountiesService {
   private readonly logger = new Logger(BountiesService.name);
 
-  // In-memory store (replace with Prisma model in production)
-  private bounties: Map<string, Bounty> = new Map();
-
-  // Application tracking: bountyId -> list of { applicantId, appliedAt }
-  private applications: Map<string, Array<{ applicantId: string; appliedAt: Date }>> = new Map();
-
-  constructor(private readonly pricing: PricingService) {
+  constructor(
+    private readonly pricing: PricingService,
+    private readonly prisma: PrismaService,
+    private readonly dependencyService: DependencyService,
+  ) {
     // Seed some sample bounties for dev/demo
     this.seedSampleBounties();
   }
@@ -68,7 +84,7 @@ export class BountiesService {
    * List all non-internal bounties with sorting, filtering, and pagination.
    * Target: <2s for 10,000+ bounties.
    */
-  listPublic(query: BountyListQueryDto) {
+  async listPublic(query: BountyListQueryDto) {
     const {
       sort = 'reward',
       order = 'desc',
@@ -81,97 +97,231 @@ export class BountiesService {
       limit = 20,
     } = query;
 
-    let results = Array.from(this.bounties.values()).filter(
-      b => !b.isInternal && b.status === 'open',
+    // Build where conditions
+    const where: any = {
+      isInternal: false,
+      status: 'open',
+    };
+
+    if (difficulty) {
+      where.difficulty = difficulty;
+    }
+
+    if (minReward != null || maxReward != null) {
+      where.rewardUsd = {};
+      if (minReward != null) where.rewardUsd.gte = minReward;
+      if (maxReward != null) where.rewardUsd.lte = maxReward;
+    }
+
+    if (tag) {
+      where.tags = {
+        contains: `"${tag}"`,
+      };
+    }
+
+    if (search) {
+      where.OR = [
+        { title: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    // Build order by
+    let orderBy: any = {};
+    switch (sort) {
+      case 'reward':
+        orderBy.rewardUsd = order;
+        break;
+      case 'deadline':
+        orderBy.deadline = order;
+        break;
+      case 'applications':
+        orderBy.applicationCount = order;
+        break;
+      default:
+        orderBy.createdAt = 'desc';
+    }
+
+    // Get total count and paginated results
+    const [total, bounties] = await Promise.all([
+      this.prisma.bounty.count({ where }),
+      this.prisma.bounty.findMany({
+        where,
+        orderBy,
+        skip: (page - 1) * limit,
+        take: limit,
+        include: {
+          prerequisites: {
+            include: {
+              prerequisiteBounty: true,
+            },
+          },
+          dependents: {
+            include: {
+              dependentBounty: true,
+            },
+          },
+        },
+      }),
+    ]);
+
+    // Add lock status to each bounty
+    const bountiesWithLockStatus = await Promise.all(
+      bounties.map(async (bounty) => ({
+        ...this.transformBountyData(bounty),
+        isLocked: await this.dependencyService.isBountyLocked(bounty.id),
+      }))
     );
 
-    // Filter by difficulty
-    if (difficulty) {
-      results = results.filter(b => b.difficulty === difficulty);
-    }
-
-    // Filter by reward range
-    if (minReward != null) {
-      results = results.filter(b => b.rewardUsd >= minReward);
-    }
-    if (maxReward != null) {
-      results = results.filter(b => b.rewardUsd <= maxReward);
-    }
-
-    // Filter by tag
-    if (tag) {
-      results = results.filter(b => b.tags.some(t => t.toLowerCase() === tag.toLowerCase()));
-    }
-
-    // Full-text search on title + description
-    if (search) {
-      const q = search.toLowerCase();
-      results = results.filter(
-        b =>
-          b.title.toLowerCase().includes(q) ||
-          b.description.toLowerCase().includes(q),
-      );
-    }
-
-    // Sort
-    results = this.sortBounties(results, sort, order);
-
-    // Pagination
-    const total = results.length;
     const totalPages = Math.ceil(total / limit);
-    const offset = (page - 1) * limit;
-    const data = results.slice(offset, offset + limit);
 
-    return { data, total, page, totalPages, limit };
+    return { 
+      data: bountiesWithLockStatus, 
+      total, 
+      page, 
+      totalPages, 
+      limit 
+    };
   }
 
   /**
    * Trending bounties: highest application count in last 7 days.
    */
-  getTrending(limitN = 10) {
+  async getTrending(limitN = 10) {
     const since = new Date(Date.now() - TRENDING_WINDOW_MS);
 
-    const bountyApplicationCounts = Array.from(this.bounties.values())
-      .filter(b => !b.isInternal && b.status === 'open')
-      .map(b => {
-        const apps = this.applications.get(b.id) ?? [];
-        const recentCount = apps.filter(a => a.appliedAt >= since).length;
-        return { bounty: b, recentCount };
-      });
+    const bounties = await this.prisma.bounty.findMany({
+      where: {
+        isInternal: false,
+        status: 'open',
+        createdAt: {
+          gte: since,
+        },
+      },
+      orderBy: {
+        applicationCount: 'desc',
+      },
+      take: limitN,
+      include: {
+        prerequisites: {
+          include: {
+            prerequisiteBounty: true,
+          },
+        },
+        dependents: {
+          include: {
+            dependentBounty: true,
+          },
+        },
+      },
+    });
 
-    return bountyApplicationCounts
-      .sort((a, b) => b.recentCount - a.recentCount)
-      .slice(0, limitN)
-      .map(({ bounty, recentCount }) => ({ ...bounty, recentApplications: recentCount }));
+    // Add lock status
+    return await Promise.all(
+      bounties.map(async (bounty) => ({
+        ...this.transformBountyData(bounty),
+        isLocked: await this.dependencyService.isBountyLocked(bounty.id),
+      }))
+    );
   }
 
   /**
    * Recently added bounties.
    */
-  getRecent(limitN = 10) {
-    return Array.from(this.bounties.values())
-      .filter(b => !b.isInternal && b.status === 'open')
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-      .slice(0, limitN);
+  async getRecent(limitN = 10) {
+    const bounties = await this.prisma.bounty.findMany({
+      where: {
+        isInternal: false,
+        status: 'open',
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+      take: limitN,
+      include: {
+        prerequisites: {
+          include: {
+            prerequisiteBounty: true,
+          },
+        },
+        dependents: {
+          include: {
+            dependentBounty: true,
+          },
+        },
+      },
+    });
+
+    // Add lock status
+    return await Promise.all(
+      bounties.map(async (bounty) => ({
+        ...this.transformBountyData(bounty),
+        isLocked: await this.dependencyService.isBountyLocked(bounty.id),
+      }))
+    );
   }
 
   /**
    * Featured bounties (max 5, maintainer-curated).
    */
-  getFeatured() {
-    return Array.from(this.bounties.values())
-      .filter(b => !b.isInternal && b.featured && b.status === 'open')
-      .slice(0, MAX_FEATURED);
+  async getFeatured() {
+    const bounties = await this.prisma.bounty.findMany({
+      where: {
+        isInternal: false,
+        featured: true,
+        status: 'open',
+      },
+      take: MAX_FEATURED,
+      include: {
+        prerequisites: {
+          include: {
+            prerequisiteBounty: true,
+          },
+        },
+        dependents: {
+          include: {
+            dependentBounty: true,
+          },
+        },
+      },
+    });
+
+    // Add lock status
+    return await Promise.all(
+      bounties.map(async (bounty) => ({
+        ...this.transformBountyData(bounty),
+        isLocked: await this.dependencyService.isBountyLocked(bounty.id),
+      }))
+    );
   }
 
   /**
    * Get full details for a single bounty (public — excludes internal).
    */
-  getDetail(id: string): Bounty {
-    const bounty = this.bounties.get(id);
+  async getDetail(id: string) {
+    const bounty = await this.prisma.bounty.findUnique({
+      where: { id },
+      include: {
+        prerequisites: {
+          include: {
+            prerequisiteBounty: true,
+          },
+        },
+        dependents: {
+          include: {
+            dependentBounty: true,
+          },
+        },
+      },
+    });
+
     if (!bounty) throw new NotFoundException(`Bounty ${id} not found`);
     if (bounty.isInternal) throw new NotFoundException(`Bounty ${id} not found`);
-    return bounty;
+
+    return {
+      ...this.transformBountyData(bounty),
+      isLocked: await this.dependencyService.isBountyLocked(bounty.id),
+    };
   }
 
   // ── Protected writes (auth required) ──────────────────────────────────────
@@ -179,73 +329,136 @@ export class BountiesService {
   /**
    * Create a new bounty (maintainer only in production).
    */
-  createBounty(dto: CreateBountyDto): Bounty {
-    const id = `bounty-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  async createBounty(dto: CreateBountyDto) {
     const tier = DIFFICULTY_TO_TIER[dto.difficulty];
     const basePrice = this.pricing.clampToTier(dto.rewardUsd, tier);
 
-    const bounty: Bounty = {
-      id,
-      title: dto.title,
-      description: dto.description,
-      requirements: dto.requirements,
-      acceptanceCriteria: dto.acceptanceCriteria,
-      rewardUsd: basePrice,
-      difficulty: dto.difficulty,
-      deadline: new Date(dto.deadline),
-      bountyType: dto.bountyType,
-      status: 'open',
-      reviewerAddress: dto.reviewerAddress,
-      reviewerGithub: dto.reviewerGithub,
-      tags: dto.tags ?? [],
-      isInternal: dto.isInternal ?? false,
-      featured: false,
-      applicationCount: 0,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
+    const bounty = await this.prisma.bounty.create({
+      data: {
+        title: dto.title,
+        description: dto.description,
+        requirements: JSON.stringify(dto.requirements),
+        acceptanceCriteria: JSON.stringify(dto.acceptanceCriteria),
+        rewardUsd: basePrice,
+        difficulty: dto.difficulty,
+        deadline: new Date(dto.deadline),
+        bountyType: dto.bountyType,
+        status: 'open',
+        reviewerAddress: dto.reviewerAddress,
+        reviewerGithub: dto.reviewerGithub,
+        tags: JSON.stringify(dto.tags ?? []),
+        isInternal: dto.isInternal ?? false,
+        featured: false,
+        applicationCount: 0,
+      },
+      include: {
+        prerequisites: {
+          include: {
+            prerequisiteBounty: true,
+          },
+        },
+        dependents: {
+          include: {
+            dependentBounty: true,
+          },
+        },
+      },
+    });
 
-    this.bounties.set(id, bounty);
-    this.logger.log(`Bounty created: ${id} — "${dto.title}" ($${dto.rewardUsd})`);
-    return bounty;
+    this.logger.log(`Bounty created: ${bounty.id} — "${dto.title}" ($${dto.rewardUsd})`);
+    
+    return {
+      ...this.transformBountyData(bounty),
+      isLocked: false, // New bounties start unlocked
+    };
   }
 
   /**
    * Feature or unfeature a bounty (maintainer only).
    * Max 5 featured at a time.
    */
-  setFeatured(dto: FeatureBountyDto): Bounty {
-    const bounty = this.bounties.get(dto.bountyId);
+  async setFeatured(dto: FeatureBountyDto) {
+    const bounty = await this.prisma.bounty.findUnique({
+      where: { id: dto.bountyId },
+    });
+
     if (!bounty) throw new NotFoundException(`Bounty ${dto.bountyId} not found`);
 
     if (dto.featured) {
-      const currentFeaturedCount = Array.from(this.bounties.values()).filter(b => b.featured).length;
+      const currentFeaturedCount = await this.prisma.bounty.count({
+        where: { featured: true },
+      });
+      
       if (currentFeaturedCount >= MAX_FEATURED) {
         throw new BadRequestException(`Maximum of ${MAX_FEATURED} featured bounties already reached`);
       }
     }
 
-    bounty.featured = dto.featured;
-    bounty.updatedAt = new Date();
-    this.bounties.set(dto.bountyId, bounty);
-    return bounty;
+    const updatedBounty = await this.prisma.bounty.update({
+      where: { id: dto.bountyId },
+      data: { featured: dto.featured },
+      include: {
+        prerequisites: {
+          include: {
+            prerequisiteBounty: true,
+          },
+        },
+        dependents: {
+          include: {
+            dependentBounty: true,
+          },
+        },
+      },
+    });
+
+    return {
+      ...this.transformBountyData(updatedBounty),
+      isLocked: await this.dependencyService.isBountyLocked(updatedBounty.id),
+    };
   }
 
   /**
    * Record an application (increments counters for trending).
    * Application details are handled by a separate authenticated flow.
    */
-  recordApplication(bountyId: string, applicantId: string): void {
-    const bounty = this.bounties.get(bountyId);
+  async recordApplication(bountyId: string, applicantId: string): Promise<void> {
+    const bounty = await this.prisma.bounty.findUnique({
+      where: { id: bountyId },
+    });
+
     if (!bounty) throw new NotFoundException(`Bounty ${bountyId} not found`);
 
-    const apps = this.applications.get(bountyId) ?? [];
-    apps.push({ applicantId, appliedAt: new Date() });
-    this.applications.set(bountyId, apps);
+    // Check if bounty is locked due to unmet prerequisites
+    const isLocked = await this.dependencyService.isBountyLocked(bountyId);
+    if (isLocked) {
+      throw new BadRequestException('Cannot apply to this bounty: prerequisite bounties must be completed first');
+    }
 
-    bounty.applicationCount = apps.length;
-    bounty.updatedAt = new Date();
-    this.bounties.set(bountyId, bounty);
+    await this.prisma.bounty.update({
+      where: { id: bountyId },
+      data: {
+        applicationCount: {
+          increment: 1,
+        },
+      },
+    });
+  }
+
+  /**
+   * Complete a bounty and auto-unlock dependent bounties
+   */
+  async completeBounty(bountyId: string) {
+    const bounty = await this.prisma.bounty.update({
+      where: { id: bountyId },
+      data: { status: 'closed' },
+    });
+
+    // Auto-unlock dependent bounties
+    const unlockedBounties = await this.dependencyService.unlockDependentBounties(bountyId);
+    
+    this.logger.log(`Bounty ${bountyId} completed. Unlocked ${unlockedBounties.length} dependent bounties.`);
+    
+    return { bounty, unlockedBounties };
   }
 
   // ── Dynamic pricing ─────────────────────────────────────────────────────────
@@ -254,8 +467,11 @@ export class BountiesService {
    * Current price breakdown for a bounty: base price, time decay, market
    * adjustment (qualified applicant pool), and any active admin override.
    */
-  getPricingBreakdown(id: string): PricingBreakdown {
-    const bounty = this.bounties.get(id);
+  async getPricingBreakdown(id: string): Promise<PricingBreakdown> {
+    const bounty = await this.prisma.bounty.findUnique({
+      where: { id },
+    });
+
     if (!bounty) throw new NotFoundException(`Bounty ${id} not found`);
 
     return this.pricing.computePrice(
@@ -273,8 +489,11 @@ export class BountiesService {
    * Admin override of a bounty's price, bounded to +/-30% of the current
    * market-computed price. Throws if outside bounds.
    */
-  overridePrice(dto: OverridePriceDto): PricingBreakdown {
-    const bounty = this.bounties.get(dto.bountyId);
+  async overridePrice(dto: OverridePriceDto): Promise<PricingBreakdown> {
+    const bounty = await this.prisma.bounty.findUnique({
+      where: { id: dto.bountyId },
+    });
+
     if (!bounty) throw new NotFoundException(`Bounty ${dto.bountyId} not found`);
 
     const { computedPrice } = this.pricing.computePrice({
@@ -284,35 +503,35 @@ export class BountiesService {
       qualifiedApplicantCount: bounty.applicationCount,
     });
 
-    bounty.priceOverride = this.pricing.validateOverride(computedPrice, dto.price);
-    bounty.updatedAt = new Date();
-    this.bounties.set(dto.bountyId, bounty);
+    const validatedOverride = this.pricing.validateOverride(computedPrice, dto.price);
+
+    await this.prisma.bounty.update({
+      where: { id: dto.bountyId },
+      data: { priceOverride: validatedOverride },
+    });
 
     return this.getPricingBreakdown(dto.bountyId);
   }
 
   // ── Private helpers ─────────────────────────────────────────────────────────
 
-  private sortBounties(items: Bounty[], sort: SortField, order: 'asc' | 'desc'): Bounty[] {
-    const dir = order === 'asc' ? 1 : -1;
-
-    return [...items].sort((a, b) => {
-      switch (sort) {
-        case 'reward':
-          return dir * (a.rewardUsd - b.rewardUsd);
-        case 'deadline':
-          return dir * (a.deadline.getTime() - b.deadline.getTime());
-        case 'difficulty':
-          return dir * (DIFFICULTY_RANK[a.difficulty] - DIFFICULTY_RANK[b.difficulty]);
-        case 'applications':
-          return dir * (a.applicationCount - b.applicationCount);
-        default:
-          return 0;
-      }
-    });
+  private transformBountyData(bounty: any) {
+    return {
+      ...bounty,
+      requirements: JSON.parse(bounty.requirements || '[]'),
+      acceptanceCriteria: JSON.parse(bounty.acceptanceCriteria || '[]'),
+      tags: JSON.parse(bounty.tags || '[]'),
+    };
   }
 
-  private seedSampleBounties() {
+  private async seedSampleBounties() {
+    // Check if bounties already exist
+    const existingCount = await this.prisma.bounty.count();
+    if (existingCount > 0) {
+      this.logger.log('Bounties already exist, skipping seed');
+      return;
+    }
+
     const samples: CreateBountyDto[] = [
       {
         title: 'Implement Soroban Credit Minting Contract',
@@ -382,9 +601,42 @@ export class BountiesService {
       },
     ];
 
-    samples.forEach(s => this.createBounty(s));
+    const createdBounties = [];
+    for (const sample of samples) {
+      const bounty = await this.createBounty(sample);
+      createdBounties.push(bounty);
+    }
+
     // Feature the first two
-    const ids = Array.from(this.bounties.keys()).slice(0, 2);
-    ids.forEach(id => this.setFeatured({ bountyId: id, featured: true }));
+    if (createdBounties.length >= 2) {
+      await this.setFeatured({ bountyId: createdBounties[0].id, featured: true });
+      await this.setFeatured({ bountyId: createdBounties[1].id, featured: true });
+    }
+
+    // Create some sample dependencies: 
+    // 'Add Pagination' must be done before 'Docker Deployment'
+    // 'API Documentation' must be done before 'Docker Deployment'
+    if (createdBounties.length >= 4) {
+      const paginationBounty = createdBounties.find(b => b.title.includes('Pagination'));
+      const docsBounty = createdBounties.find(b => b.title.includes('API Documentation'));
+      const dockerBounty = createdBounties.find(b => b.title.includes('Docker'));
+
+      if (paginationBounty && dockerBounty) {
+        await this.dependencyService.createDependency({
+          prerequisiteBountyId: paginationBounty.id,
+          dependentBountyId: dockerBounty.id,
+          isRequired: true,
+        });
+      }
+
+      if (docsBounty && dockerBounty) {
+        await this.dependencyService.createDependency({
+          prerequisiteBountyId: docsBounty.id,
+          dependentBountyId: dockerBounty.id,
+          isRequired: true,
+        });
+      }
+    }
+
+    this.logger.log(`Seeded ${createdBounties.length} sample bounties with dependencies`);
   }
-}

@@ -8,6 +8,7 @@ import {
   IsString,
   Min,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
 
 export type Difficulty = 'beginner' | 'intermediate' | 'advanced' | 'expert';
 export type BountyStatus = 'open' | 'in_progress' | 'closed' | 'cancelled';
@@ -91,4 +92,48 @@ export class OverridePriceDto {
   @IsNumber()
   @Min(0)
   price: number;
+}
+
+export class CreateDependencyDto {
+  @IsString()
+  prerequisiteBountyId: string;
+
+  @IsString()
+  dependentBountyId: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isRequired?: boolean = true;
+}
+
+export class RemoveDependencyDto {
+  @IsString()
+  prerequisiteBountyId: string;
+
+  @IsString()
+  dependentBountyId: string;
+}
+
+export class GetDependencyGraphDto {
+  @IsOptional()
+  @IsString()
+  bountyId?: string; // If provided, return subgraph centered on this bounty
+}
+
+export interface DependencyGraphNode {
+  bounty: any; // Will be properly typed when used
+  isLocked: boolean;
+  completedPrerequisites: number;
+  totalPrerequisites: number;
+}
+
+export interface DependencyGraphEdge {
+  prerequisiteBountyId: string;
+  dependentBountyId: string;
+  isRequired: boolean;
+}
+
+export interface DependencyGraph {
+  nodes: DependencyGraphNode[];
+  edges: DependencyGraphEdge[];
 }
