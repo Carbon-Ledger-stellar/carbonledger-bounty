@@ -5,7 +5,10 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { CreateSupportTicketDto, UpdateSupportTicketDto } from './support.dto';
-import { v4 as uuidv4 } from 'uuid';
+
+function generateTicketId(): string {
+  return `ticket-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+}
 
 @Injectable()
 export class SupportTicketService {
@@ -18,7 +21,7 @@ export class SupportTicketService {
     dto: CreateSupportTicketDto,
     contributorId: string,
   ) {
-    const ticketId = `ticket-${uuidv4()}`;
+    const ticketId = generateTicketId();
 
     const ticket = await this.prisma.supportTicket.create({
       data: {
