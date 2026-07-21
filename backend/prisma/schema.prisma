@@ -137,3 +137,70 @@ model SupportMetrics {
 
   @@unique([ticketType])
 }
+
+// ── Bounty Analytics Models ────────────────────────────────────────────────
+
+/// Tracks each application submitted to a bounty
+model BountyApplication {
+  id            String    @id @default(cuid())
+  bountyId      String
+  bountyTitle   String
+  applicantId   String    // public key / contributor identifier
+  rewardUsd     Float
+  difficulty    String    // beginner | intermediate | advanced | expert
+  bountyType    String
+  status        String    @default("pending") // pending | accepted | rejected | withdrawn
+  appliedAt     DateTime  @default(now())
+  acceptedAt    DateTime?
+  completedAt   DateTime?
+  rejectedAt    DateTime?
+
+  @@index([bountyId])
+  @@index([applicantId])
+  @@index([status])
+  @@index([appliedAt])
+}
+
+/// Records completed bounty payouts
+model BountyCompletion {
+  id            String   @id @default(cuid())
+  bountyId      String
+  bountyTitle   String
+  contributorId String   // public key / contributor identifier
+  rewardUsd     Float
+  difficulty    String
+  bountyType    String
+  startedAt     DateTime // when work began (application accepted)
+  completedAt   DateTime @default(now())
+  hoursToComplete Float? // calculated: completedAt - startedAt in hours
+
+  @@index([contributorId])
+  @@index([bountyId])
+  @@index([completedAt])
+}
+
+/// Hourly analytics snapshot for trend analysis
+model AnalyticsSnapshot {
+  id                  String   @id @default(cuid())
+  snapshotAt          DateTime @default(now())
+
+  // Core metrics
+  bountiesOpen        Int      @default(0)
+  bountiesCompleted   Int      @default(0)
+  bountiesCancelled   Int      @default(0)
+  applicationsPending Int      @default(0)
+  applicationsTotal   Int      @default(0)
+
+  // Velocity
+  avgTimeToCompleteHours Float? // avg hours from start to completion
+  completionRate      Float?   // completions / total closed in period
+  costPerTask         Float?   // total payouts / total completions
+
+  // Cumulative totals at snapshot time
+  totalBountiesEver       Int    @default(0)
+  totalCompletionsEver    Int    @default(0)
+  totalPayoutsUsd         Float  @default(0)
+  uniqueContributorsEver  Int    @default(0)
+
+  @@index([snapshotAt])
+}
