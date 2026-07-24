@@ -3,8 +3,8 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider = "sqlite"
+  url      = "file:./dev.db"
 }
 
 model CarbonProject {
@@ -326,4 +326,54 @@ model ContributorBadge {
 
   @@unique([contributorId, badge])
   @@index([contributorId])
+}
+
+// ── Bounty Dependency System ──────────────────────────────────────────────
+
+model Bounty {
+  id                  String   @id @default(cuid())
+  title               String
+  description         String
+  requirements        String   // JSON string of array
+  acceptanceCriteria  String   // JSON string of array
+  rewardUsd           Float
+  difficulty          String   // beginner, intermediate, advanced, expert
+  deadline            DateTime
+  bountyType          String
+  status              String   @default("open") // open, in_progress, closed, cancelled
+  reviewerAddress     String
+  reviewerGithub      String?
+  tags                String   // JSON string of array
+  isInternal          Boolean  @default(false)
+  featured            Boolean  @default(false)
+  applicationCount    Int      @default(0)
+  priceOverride       Float?
+  budgetProjectId     String?  // Budget tracking
+  budgetPeriod        String?  // Budget period
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  // Dependency relationships
+  prerequisites       BountyDependency[] @relation("BountyPrerequisites")
+  dependents          BountyDependency[] @relation("BountyDependents")
+
+  @@index([status])
+  @@index([featured])
+  @@index([deadline])
+  @@index([bountyType])
+}
+
+model BountyDependency {
+  id                   String   @id @default(cuid())
+  prerequisiteBountyId String   // The bounty that must be completed first
+  dependentBountyId    String   // The bounty that depends on the prerequisite
+  isRequired           Boolean  @default(true) // True for hard dependencies, false for soft recommendations
+  createdAt            DateTime @default(now())
+
+  prerequisiteBounty   Bounty @relation("BountyPrerequisites", fields: [prerequisiteBountyId], references: [id], onDelete: Cascade)
+  dependentBounty      Bounty @relation("BountyDependents", fields: [dependentBountyId], references: [id], onDelete: Cascade)
+
+  @@unique([prerequisiteBountyId, dependentBountyId])
+  @@index([prerequisiteBountyId])
+  @@index([dependentBountyId])
 }
