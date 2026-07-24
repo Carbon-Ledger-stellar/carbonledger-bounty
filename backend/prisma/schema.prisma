@@ -377,3 +377,89 @@ model BountyDependency {
   @@index([prerequisiteBountyId])
   @@index([dependentBountyId])
 }
+
+// ── Milestone-based Escrow Payment System ────────────────────────────────────
+
+/// Escrow account that holds the total bounty reward until milestones are released.
+/// One EscrowAccount per Bounty.
+model EscrowAccount {
+  id             String   @id @default(cuid())
+  bountyId       String   @unique
+  /// Total USD locked into this escrow at creation time
+  totalAmount    Float
+  /// Running total of USD released to contributors so far
+  releasedAmount Float    @default(0)
+  /// active | completed | cancelled
+  status         String   @default("active")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  milestones BountyMilestone[]
+  auditLogs  EscrowAuditLog[]
+
+  @@index([bountyId])
+  @@index([status])
+}
+
+/// A single deliverable milestone within a bounty, backed by a portion of the escrow.
+/// State machine: planned → in-review → approved → funds-released
+///                              └──────► rejected → planned (re-work cycle)
+model BountyMilestone {
+  id                String    @id @default(cuid())
+  escrowId          String
+  bountyId          String
+  /// Human-readable description of the deliverable
+  description       String
+  /// Hard deadline for the milestone
+  dueDate           DateTime
+  /// Stellar public key of the reviewer responsible for this milestone
+  reviewerAddress   String
+  /// USD amount held in escrow for this milestone
+  paymentAmount     Float
+  /// planned | in-review | approved | funds-released | rejected
+  status            String    @default("planned")
+  /// Reviewer feedback attached on rejection; cleared on re-submission
+  rejectionFeedback String?
+  /// Timestamp when status moved to in-review (used for timeout calculation)
+  submittedAt       DateTime?
+  /// Timestamp when funds were released to the contributor
+  fundsReleasedAt   DateTime?
+  /// True when the auto-release scheduler triggered the release (not the reviewer)
+  autoReleased      Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  escrow    EscrowAccount    @relation(fields: [escrowId], references: [id])
+  auditLogs EscrowAuditLog[]
+
+  @@index([escrowId])
+  @@index([bountyId])
+  @@index([status])
+  @@index([reviewerAddress])
+  /// Scheduler queries milestones stuck in-review past their timeout
+  @@index([submittedAt])
+}
+
+/// Immutable audit trail for every escrow and milestone state transition.
+model EscrowAuditLog {
+  id          String   @id @default(cuid())
+  escrowId    String
+  /// Null for escrow-level events; set for milestone-level events
+  milestoneId String?
+  /// Public key or system identifier of the actor (use "system" for auto-release)
+  actorId     String
+  /// One of the ESCROW_ACTIONS constants
+  action      String
+  /// JSON-serialised snapshot of relevant state at the time of the action
+  payload     String?
+  createdAt   DateTime @default(now())
+
+  escrow    EscrowAccount    @relation(fields: [escrowId], references: [id])
+  milestone BountyMilestone? @relation(fields: [milestoneId], references: [id])
+
+  @@index([escrowId])
+  @@index([milestoneId])
+  @@index([actorId])
+  @@index([action])
+  @@index([createdAt])
+}
