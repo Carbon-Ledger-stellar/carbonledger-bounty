@@ -12,6 +12,7 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { SupportTicketService } from './support-ticket.service';
 import { CreateSupportTicketDto, UpdateSupportTicketDto } from './support.dto';
+import { AuthGuard } from '@nestjs/passport';
 
 @Controller('api/v1/support')
 export class SupportTicketController {

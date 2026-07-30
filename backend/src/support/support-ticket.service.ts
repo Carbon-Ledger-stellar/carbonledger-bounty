@@ -6,6 +6,10 @@ import {
 import { PrismaService } from '../prisma.service';
 import { CreateSupportTicketDto, UpdateSupportTicketDto } from './support.dto';
 
+function generateTicketId(): string {
+  return `ticket-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+}
+
 @Injectable()
 export class SupportTicketService {
   constructor(private prisma: PrismaService) {}
@@ -17,7 +21,7 @@ export class SupportTicketService {
     dto: CreateSupportTicketDto,
     contributorId: string,
   ) {
-    const ticketId = `ticket-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const ticketId = generateTicketId();
 
     const ticket = await this.prisma.supportTicket.create({
       data: {

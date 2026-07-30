@@ -1,12 +1,16 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
-import { 
-  CreateDependencyDto, 
-  RemoveDependencyDto, 
-  DependencyGraph, 
-  DependencyGraphNode, 
-  DependencyGraphEdge 
-} from './bounties.dto';
+
+export interface CreateDependencyDto {
+  prerequisiteBountyId: string;
+  dependentBountyId: string;
+  isRequired?: boolean;
+}
+
+export interface RemoveDependencyDto {
+  prerequisiteBountyId: string;
+  dependentBountyId: string;
+}
 
 @Injectable()
 export class DependencyService {
@@ -74,91 +78,6 @@ export class DependencyService {
     });
 
     return { message: 'Dependency removed successfully' };
-  }
-
-  /**
-   * Get all dependencies for a specific bounty
-   */
-  async getBountyDependencies(bountyId: string) {
-    const bounty = await this.prisma.bounty.findUnique({
-      where: { id: bountyId },
-      include: {
-        prerequisites: {
-          include: {
-            prerequisiteBounty: true
-          }
-        },
-        dependents: {
-          include: {
-            dependentBounty: true
-          }
-        }
-      }
-    });
-
-    if (!bounty) {
-      throw new NotFoundException(`Bounty ${bountyId} not found`);
-    }
-
-    return bounty;
-  }
-
-  /**
-   * Generate dependency graph for visualization
-   */
-  async getDependencyGraph(bountyId?: string): Promise<DependencyGraph> {
-    let bounties;
-    let dependencies;
-
-    if (bountyId) {
-      // Get subgraph centered on specific bounty
-      const connectedBountyIds = await this.getConnectedBounties(bountyId);
-      bounties = await this.prisma.bounty.findMany({
-        where: { id: { in: connectedBountyIds } },
-        include: {
-          prerequisites: true,
-          dependents: true
-        }
-      });
-
-      dependencies = await this.prisma.bountyDependency.findMany({
-        where: {
-          AND: [
-            { prerequisiteBountyId: { in: connectedBountyIds } },
-            { dependentBountyId: { in: connectedBountyIds } }
-          ]
-        }
-      });
-    } else {
-      // Get full graph
-      bounties = await this.prisma.bounty.findMany({
-        include: {
-          prerequisites: true,
-          dependents: true
-        }
-      });
-
-      dependencies = await this.prisma.bountyDependency.findMany();
-    }
-
-    // Create nodes with lock status
-    const nodes: DependencyGraphNode[] = await Promise.all(
-      bounties.map(async (bounty) => ({
-        bounty,
-        isLocked: await this.isBountyLocked(bounty.id),
-        completedPrerequisites: await this.getCompletedPrerequisitesCount(bounty.id),
-        totalPrerequisites: bounty.prerequisites.length
-      }))
-    );
-
-    // Create edges
-    const edges: DependencyGraphEdge[] = dependencies.map(dep => ({
-      prerequisiteBountyId: dep.prerequisiteBountyId,
-      dependentBountyId: dep.dependentBountyId,
-      isRequired: dep.isRequired
-    }));
-
-    return { nodes, edges };
   }
 
   /**
@@ -259,56 +178,5 @@ export class DependencyService {
     if (await hasCycle(dependentId)) {
       throw new BadRequestException('Creating this dependency would create a circular dependency');
     }
-  }
-
-  /**
-   * Get all bounties connected to a specific bounty (for subgraph visualization)
-   */
-  private async getConnectedBounties(bountyId: string): Promise<string[]> {
-    const connected = new Set<string>([bountyId]);
-    const toVisit = [bountyId];
-
-    while (toVisit.length > 0) {
-      const currentId = toVisit.pop()!;
-      
-      // Get prerequisites and dependents
-      const [prerequisites, dependents] = await Promise.all([
-        this.prisma.bountyDependency.findMany({
-          where: { dependentBountyId: currentId },
-          select: { prerequisiteBountyId: true }
-        }),
-        this.prisma.bountyDependency.findMany({
-          where: { prerequisiteBountyId: currentId },
-          select: { dependentBountyId: true }
-        })
-      ]);
-
-      // Add unvisited connected bounties
-      [...prerequisites.map(p => p.prerequisiteBountyId), ...dependents.map(d => d.dependentBountyId)]
-        .forEach(id => {
-          if (!connected.has(id)) {
-            connected.add(id);
-            toVisit.push(id);
-          }
-        });
-    }
-
-    return Array.from(connected);
-  }
-
-  /**
-   * Get count of completed prerequisites for a bounty
-   */
-  private async getCompletedPrerequisitesCount(bountyId: string): Promise<number> {
-    const result = await this.prisma.bountyDependency.count({
-      where: {
-        dependentBountyId: bountyId,
-        prerequisiteBounty: {
-          status: 'closed'
-        }
-      }
-    });
-
-    return result;
   }
 }
