@@ -198,6 +198,22 @@ export interface Bounty {
   applicationCount: number;
   createdAt: string;
   updatedAt: string;
+  /** Prerequisites that must be completed before this bounty can be claimed */
+  prerequisites?: BountyDependency[];
+  /** Bounties that depend on this one */
+  dependents?: BountyDependency[];
+  /** Whether this bounty is currently locked due to unmet prerequisites */
+  isLocked?: boolean;
+}
+
+export interface BountyDependency {
+  id: string;
+  prerequisiteBountyId: string;
+  dependentBountyId: string;
+  isRequired: boolean;
+  createdAt: string;
+  prerequisiteBounty?: Bounty;
+  dependentBounty?: Bounty;
 }
 
 export interface BountyListResponse {

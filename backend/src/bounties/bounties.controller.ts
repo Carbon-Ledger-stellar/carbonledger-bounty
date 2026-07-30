@@ -16,6 +16,8 @@ import {
   FeatureBountyDto,
   BountyListQueryDto,
   OverridePriceDto,
+  CreateDependencyDto,
+  RemoveDependencyDto,
   SortField,
   Difficulty,
 } from './bounties.dto';
@@ -83,11 +85,27 @@ export class BountiesController {
   }
 
   /**
+   * Get dependency graph for visualization.
+   */
+  @Get('dependencies/graph')
+  async getDependencyGraph(@Query('bountyId') bountyId?: string) {
+    return this.dependencyService.getDependencyGraph(bountyId);
+  }
+
+  /**
    * Full detail page for a single bounty.
    */
   @Get(':id')
   async getDetail(@Param('id') id: string) {
     return this.bountiesService.getDetail(id);
+  }
+
+  /**
+   * Get all dependencies for a specific bounty.
+   */
+  @Get(':id/dependencies')
+  async getBountyDependencies(@Param('id') id: string) {
+    return this.dependencyService.getBountyDependencies(id);
   }
 
   /**
@@ -116,6 +134,15 @@ export class BountiesController {
   @UseGuards(AuthGuard('jwt'))
   async setFeatured(@Body() dto: FeatureBountyDto) {
     return this.bountiesService.setFeatured(dto);
+  }
+
+  /**
+   * Create a new dependency between bounties (maintainer/admin only).
+   */
+  @Post('dependencies')
+  @UseGuards(AuthGuard('jwt'))
+  async createDependency(@Body() dto: CreateDependencyDto) {
+    return this.dependencyService.createDependency(dto);
   }
 
   /**

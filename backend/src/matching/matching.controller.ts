@@ -115,8 +115,8 @@ export class MatchingController {
    */
   @Post('batch-recommendations')
   @UseGuards(AuthGuard('jwt'))
-  batchRecommendations(@Body() body: { contributorIds: string[] }) {
-    const resultsMap = this.skillMatcherService.getBatchRecommendations(
+  async batchRecommendations(@Body() body: { contributorIds: string[] }) {
+    const resultsMap = await this.skillMatcherService.getBatchRecommendations(
       body.contributorIds,
     );
     // Convert Map to plain object for JSON serialisation

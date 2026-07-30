@@ -32,7 +32,7 @@ export class SupportTicketService {
         status: 'open',
         title: dto.title,
         description: dto.description,
-        attachments: dto.attachments || [],
+        attachments: JSON.stringify(dto.attachments || []),
       },
     });
 

@@ -4,6 +4,7 @@ import { use } from 'react';
 import Link from 'next/link';
 import { useBounty, Difficulty } from '../../../lib/api';
 import { colors, spacing, shadows, borderRadius } from '../../../styles/design-system';
+import { PrerequisitesDisplay } from '../../../components/PrerequisitesDisplay';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -271,6 +272,19 @@ export default function BountyDetailPage({ params }: { params: Promise<{ id: str
           <SectionCard title="Acceptance Criteria">
             <BulletList items={bounty.acceptanceCriteria} />
           </SectionCard>
+
+          {/* Prerequisites and Dependencies */}
+          <div
+            style={{
+              backgroundColor: 'white',
+              borderRadius: borderRadius.lg,
+              padding: spacing.lg,
+              border: `1px solid ${colors.neutral[200]}`,
+              boxShadow: shadows.sm,
+            }}
+          >
+            <PrerequisitesDisplay bountyId={bounty.id} />
+          </div>
 
           {/* Tags */}
           {bounty.tags.length > 0 && (

@@ -246,19 +246,51 @@ export default function BountiesPage() {
 
       {/* Hero */}
       <header style={{ marginBottom: spacing.xl }}>
-        <h1
-          style={{
-            fontSize: 'clamp(1.75rem, 4vw, 2.5rem)',
-            fontWeight: 800,
-            color: colors.neutral[900],
-            margin: 0,
-          }}
-        >
-          Bounty Marketplace
-        </h1>
-        <p style={{ color: colors.neutral[500], marginTop: spacing.xs, fontSize: '1.05rem' }}>
-          Browse open bounties — no account needed. Apply when you&apos;re ready to build.
-        </p>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: spacing.sm }}>
+          <div>
+            <h1
+              style={{
+                fontSize: 'clamp(1.75rem, 4vw, 2.5rem)',
+                fontWeight: 800,
+                color: colors.neutral[900],
+                margin: 0,
+              }}
+            >
+              Bounty Marketplace
+            </h1>
+            <p style={{ color: colors.neutral[500], marginTop: spacing.xs, fontSize: '1.05rem' }}>
+              Browse open bounties — no account needed. Apply when you&apos;re ready to build.
+            </p>
+          </div>
+          <Link
+            href="/bounties/graph"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              padding: '0.75rem 1rem',
+              backgroundColor: colors.primary[50],
+              color: colors.primary[700],
+              borderRadius: borderRadius.md,
+              textDecoration: 'none',
+              fontWeight: 600,
+              fontSize: '0.875rem',
+              border: `1px solid ${colors.primary[200]}`,
+              transition: 'all 0.2s ease',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = colors.primary[100];
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = colors.primary[50];
+            }}
+          >
+            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            Dependency Graph
+          </Link>
+        </div>
       </header>
 
       {/* Featured section (hide when searching) */}

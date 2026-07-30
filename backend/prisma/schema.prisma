@@ -57,7 +57,7 @@ model RetirementRecord {
   beneficiary      String
   retirementReason String
   vintageYear      Int
-  serialNumbers    String[]
+  serialNumbers    String   // JSON string of array
   txHash           String
   retiredAt        DateTime @default(now())
 
@@ -201,7 +201,7 @@ model SupportTicket {
   status          String   @default("open") // open, in-progress, resolved
   title           String
   description     String
-  attachments     String[]
+  attachments     String   // JSON string of array
   createdAt       DateTime @default(now())
   acknowledgedAt  DateTime?
   resolvedAt      DateTime?

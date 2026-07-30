@@ -154,7 +154,7 @@ export class SkillMatcherService implements OnModuleInit {
     return Array.from(this.contributors.values());
   }
 
-  getRecommendations(contributorId: string, limit = 10): RecommendationResponse {
+  async getRecommendations(contributorId: string, limit = 10): Promise<RecommendationResponse> {
     const cacheKey = `rec:${contributorId}:${limit}`;
     const cached = this.cache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
@@ -163,7 +163,7 @@ export class SkillMatcherService implements OnModuleInit {
 
     const start = Date.now();
     const profile = this.getContributorProfile(contributorId);
-    const bounties = this.getAvailableBounties();
+    const bounties = await this.getAvailableBounties();
 
     const results: BountyMatchResult[] = bounties
       .map(bounty => this.buildMatchResult(profile, bounty))
@@ -183,9 +183,9 @@ export class SkillMatcherService implements OnModuleInit {
     return response;
   }
 
-  getSuggestedBounties(contributorId: string, minScore = 70): BountyMatchResult[] {
+  async getSuggestedBounties(contributorId: string, minScore = 70): Promise<BountyMatchResult[]> {
     const profile = this.getContributorProfile(contributorId);
-    const bounties = this.getAvailableBounties();
+    const bounties = await this.getAvailableBounties();
 
     return bounties
       .map(bounty => this.buildMatchResult(profile, bounty))
@@ -193,17 +193,17 @@ export class SkillMatcherService implements OnModuleInit {
       .sort((a, b) => b.matchScore - a.matchScore);
   }
 
-  getLearningPaths(contributorId: string): LearningPath[] {
+  async getLearningPaths(contributorId: string): Promise<LearningPath[]> {
     const profile = this.getContributorProfile(contributorId);
-    const bounties = this.getAvailableBounties();
+    const bounties = await this.getAvailableBounties();
     return this.computeLearningPaths(profile, bounties);
   }
 
-  getBatchRecommendations(contributorIds: string[]): Map<string, RecommendationResponse> {
+  async getBatchRecommendations(contributorIds: string[]): Promise<Map<string, RecommendationResponse>> {
     const resultMap = new Map<string, RecommendationResponse>();
     for (const id of contributorIds) {
       try {
-        resultMap.set(id, this.getRecommendations(id));
+        resultMap.set(id, await this.getRecommendations(id));
       } catch (err) {
         // Skip contributors not found — caller can inspect the map
         this.logger.warn(`Skipping contributor ${id}: ${(err as Error).message}`);
@@ -214,12 +214,12 @@ export class SkillMatcherService implements OnModuleInit {
 
   // ── Private helpers ─────────────────────────────────────────────────────────
 
-  private getAvailableBounties(): Bounty[] {
-    const { data } = this.bountiesService.listPublic({
+  private async getAvailableBounties(): Promise<Bounty[]> {
+    const result = await this.bountiesService.listPublic({
       page: 1,
       limit: 1000,
     });
-    return data;
+    return result.data;
   }
 
   private buildMatchResult(profile: ContributorProfile, bounty: Bounty): BountyMatchResult {
